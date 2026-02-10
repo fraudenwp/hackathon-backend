@@ -1,0 +1,117 @@
+x-common-env: &common-env
+  BASE_URL: ${BASE_URL}
+  DATABASE_URL: ${DATABASE_URL}
+  VALKEY_WORKER_URL: ${VALKEY_WORKER_URL}
+  SECRET_KEY: ${SECRET_KEY}
+  SECRET_KEY_ENCRYPTION: ${SECRET_KEY_ENCRYPTION}
+  MEDIA_URL_PREFIX: ${MEDIA_URL_PREFIX}
+  DEVELOPMENT: ${DEVELOPMENT}
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_ALGORITHM: ${JWT_ALGORITHM}
+  JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
+  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+  R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+  R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+  R2_ENDPOINT_URL: ${R2_ENDPOINT_URL}
+  R2_REGION_NAME: ${R2_REGION_NAME}
+  
+x-worker-env: &worker-env
+  <<: *common-env
+
+x-common-volumes: &common-volumes
+  - .:/usr/src/app
+
+x-worker-command: &worker-command |
+  sh -c "
+    pip install debugpy -t /tmp --upgrade &&
+    export PYTHONPATH=/tmp:$$PYTHONPATH &&
+    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --log-level=INFO
+  "
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command:
+      [
+        "sh",
+        "-c",
+        "pip install debugpy && python3 -m debugpy --wait-for-client --listen 0.0.0.0:5678 -m uvicorn src:app --reload --workers 1 --host 0.0.0.0 --port 8000",
+      ]
+    volumes: *common-volumes
+    ports:
+      - 8004:8000
+      - 5678:5678
+    environment:
+      <<: *common-env
+      COMMAND: web
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.5"
+    depends_on:
+      - db
+      - valkey-worker
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: *worker-command
+    volumes: *common-volumes
+    ports:
+      - 6900:6900
+    environment:
+      <<: *worker-env
+      COMMAND: worker
+      PYTHONDONTWRITEBYTECODE: 1
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.5"
+    depends_on:
+      - db
+      - valkey-worker
+
+  valkey-worker:
+    image: valkey/valkey:8.1.4
+    expose:
+      - 6379
+    ports:
+      - 6379:6379
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  db:
+    image: postgres:17.6-bookworm
+    expose:
+      - 5432
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=talenterai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+volumes:
+  postgres_data:
+    name: talenterai_postgres_data
+

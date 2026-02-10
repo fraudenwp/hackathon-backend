@@ -1,0 +1,142 @@
+x-common-env: &common-env
+  BASE_URL: ${BASE_URL}
+  DATABASE_URL: ${DATABASE_URL}
+  VALKEY_WORKER_URL: ${VALKEY_WORKER_URL}
+  SECRET_KEY: ${SECRET_KEY}
+  SECRET_KEY_ENCRYPTION: ${SECRET_KEY_ENCRYPTION}
+  MEDIA_URL_PREFIX: ${MEDIA_URL_PREFIX}
+  DEVELOPMENT: "false"
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY}
+  JWT_ALGORITHM: ${JWT_ALGORITHM}
+  JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
+  FRONTEND_BASE_URL: ${FRONTEND_BASE_URL}
+  R2_ACCESS_KEY_ID: ${R2_ACCESS_KEY_ID}
+  R2_SECRET_ACCESS_KEY: ${R2_SECRET_ACCESS_KEY}
+  R2_ACCOUNT_ID: ${R2_ACCOUNT_ID}
+  R2_BUCKET_NAME: ${R2_BUCKET_NAME}
+  R2_ENDPOINT_URL: ${R2_ENDPOINT_URL}
+  R2_REGION_NAME: ${R2_REGION_NAME}
+  WIROAI_API_KEY: ${WIROAI_API_KEY}
+  WIROAI_API_SECRET: ${WIROAI_API_SECRET}
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "alembic upgrade head &&
+             uvicorn src:app --workers 4 --host 0.0.0.0 --port 8005"
+    ports:
+      - "${WEB_PORT:-8005}:8005"
+    expose:
+      - 8005
+    environment:
+      <<: *common-env
+      COMMAND: web
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+        reservations:
+          cpus: "2.0"
+          memory: 2G
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import requests; requests.get('http://localhost:8005/health', timeout=5)",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - talenterai_network
+    depends_on:
+      valkey-worker:
+        condition: service_started
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: >
+      sh -c "python -m taskiq worker --workers 4 src.tasks.taskiq_setup:broker --fs-discover --log-level=INFO"
+    environment:
+      <<: *common-env
+      COMMAND: worker
+    ports:
+      - "6909:6900"
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
+    restart: unless-stopped
+    networks:
+      - talenterai_network
+    depends_on:
+      valkey-worker:
+        condition: service_started
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  valkey-worker:
+    image: valkey/valkey:8.1.4
+    command:
+      [
+        "valkey-server",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "allkeys-lru",
+      ]
+    expose:
+      - 6379
+    networks:
+      - talenterai_network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.25"
+          memory: 128M
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - valkey_data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+volumes:
+  valkey_data:
+    name: talenterai_valkey_data
+
+networks:
+  talenterai_network:
+    driver: bridge

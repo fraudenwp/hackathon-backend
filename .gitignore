@@ -1,0 +1,15 @@
+__pycache__
+.idea
+*.db
+main.py
+/data/
+volumes
+.venv
+.DS_Store
+dump.rdb
+.postgres-data
+.secrets/
+.env
+.env.production
+.env.local
+.env.*.local

@@ -1,0 +1,10 @@
+-r requirements.in
+pre-commit
+debugpy
+ruff
+pytest
+pytest-asyncio
+pytest-cov
+pytest-env
+httpx
+aiosqlite
