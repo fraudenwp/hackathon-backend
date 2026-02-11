@@ -1,0 +1,20 @@
+{
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "terminal.activateEnvironment": true
+  },
+  "python.defaultInterpreterPath": "/opt/homebrew/Caskroom/miniconda/base/envs/resai/bin/python",
+  "python.terminal.activateEnvironment": true,
+  "python.condaPath": "/opt/homebrew/Caskroom/miniconda/base/bin/conda",
+  "python.pythonPath": "/opt/homebrew/Caskroom/miniconda/base/envs/resai/bin/python",
+  "python.formatting.provider": "none",
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.organizeImports": "always",
+    "source.unusedImports": "always",
+    "source.sortImports": "always"
+  },
+  "python-envs.defaultEnvManager": "ms-python.python:conda",
+  "python-envs.defaultPackageManager": "ms-python.python:conda",
+  "python-envs.pythonProjects": []
+}

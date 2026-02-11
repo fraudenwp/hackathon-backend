@@ -12,16 +12,74 @@ from src.models.basemodels.livekit import (
     TokenResponse,
     RoomResponse,
     RoomListResponse,
+    MakeCallRequest,
+    MakeCallResponse,
 )
 from src.services.livekit_service import livekit_service
-from src.services.voice_agent import start_agent, stop_agent, get_agent
+from src.services.voice_agent import get_agent
 from src.crud import voice_conversation
 from src.constants.env import LIVEKIT_WS_URL
+from src.tasks.voice.voice_agent_task import start_voice_agent_task, stop_voice_agent_task
 
 
 class LiveKitController:
     tags = ["livekit"]
     router = APIRouter(tags=tags)
+
+    @router.post("/make-call")
+    async def make_call(
+        request: MakeCallRequest,
+        current_user: Annotated[
+            User,
+            Security(
+                AuthCRUD.get_current_user_with_access(),
+            ),
+        ],
+        db: AsyncSession = Depends(get_session),
+    ) -> MakeCallResponse:
+        """Create room, start AI agent, and return connection token - all in one call"""
+        # Generate unique room name
+        room_name = f"room-{uuid.uuid4()}"
+
+        # Create room in LiveKit
+        room = await livekit_service.create_room(
+            name=room_name,
+            empty_timeout=request.empty_timeout,
+            max_participants=request.max_participants,
+        )
+
+        # Save to database
+        conversation = await voice_conversation.create_conversation(
+            db=db,
+            user_id=current_user.id,
+            room_name=room.name,
+            room_sid=room.sid,
+        )
+
+        # Mark AI as enabled (will start in background)
+        conversation.ai_enabled = True
+        await db.commit()
+
+        # Generate access token for user
+        token = await livekit_service.generate_token(
+            room_name=room_name,
+            participant_identity=str(current_user.id),
+            participant_name=current_user.email,
+            metadata={"user_id": str(current_user.id)},
+        )
+
+        # Start AI agent in background using Taskiq
+        await start_voice_agent_task.kiq(room_name, system_prompt=request.system_prompt)
+
+        return MakeCallResponse(
+            token=token,
+            room_name=room_name,
+            ws_url=LIVEKIT_WS_URL,
+            participant_identity=str(current_user.id),
+            room_sid=room.sid,
+            ai_enabled=True,
+            message="Voice call ready! AI agent is starting in background. Connect using the provided token and ws_url.",
+        )
 
     @router.post("/rooms/create")
     async def create_room(
@@ -181,14 +239,14 @@ class LiveKitController:
         if get_agent(room_name):
             raise HTTPException(status_code=400, detail="Agent already running")
 
-        # Start agent
-        await start_agent(room_name)
-
         # Update DB
         conversation.ai_enabled = True
         await db.commit()
 
-        return {"message": "AI agent started successfully", "room_name": room_name}
+        # Start agent using Taskiq
+        await start_voice_agent_task.kiq(room_name)
+
+        return {"message": "AI agent is starting in background", "room_name": room_name}
 
     @router.post("/rooms/{room_name}/stop-ai")
     async def stop_ai_agent(
@@ -213,14 +271,15 @@ class LiveKitController:
         if conversation.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Not authorized")
 
-        # Stop agent
-        try:
-            await stop_agent(room_name)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+        # Check if agent is running
+        if not get_agent(room_name):
+            raise HTTPException(status_code=400, detail="No agent running in this room")
 
         # Update DB
         conversation.ai_enabled = False
         await db.commit()
 
-        return {"message": "AI agent stopped successfully", "room_name": room_name}
+        # Stop agent using Taskiq
+        await stop_voice_agent_task.kiq(room_name)
+
+        return {"message": "AI agent is stopping in background", "room_name": room_name}

@@ -12,7 +12,7 @@ ENV PYTHONUNBUFFERED 1
 # install system dependencies
 RUN apt-get update \
   && apt-get -y install netcat-openbsd gcc postgresql \
-    libglib2.0-0 libglib2.0-dev libopus0 libvpx7 \
+  libglib2.0-0 libglib2.0-dev libopus0 libvpx7 \
   && apt-get clean
 
 # install python dependencies

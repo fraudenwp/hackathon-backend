@@ -1,9 +1,8 @@
 """FAL.AI LLM Plugin for LiveKit Agents"""
 
-from typing import List
 from livekit.agents import llm
-from livekit.agents.llm import LLM, ChatContext, ChatMessage, ChatRole
-
+from livekit.agents.llm import LLM, ChatContext, ChatRole
+from typing import Any
 from src.services.fal_ai import fal_ai_service
 from src.utils.logger import get_logger, log_error
 
@@ -22,7 +21,7 @@ class FalLLM(LLM):
         self,
         *,
         chat_ctx: ChatContext,
-        fnc_ctx: llm.FunctionContext | None = None,
+        fnc_ctx: Any | None = None,
         temperature: float | None = None,
         n: int = 1,
     ) -> "llm.LLMStream":

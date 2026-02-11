@@ -6,13 +6,20 @@ import asyncio
 from typing import Dict, Optional
 
 from livekit import rtc
-from livekit.agents import VoiceAssistant, WorkerOptions, cli
+from livekit.agents import Agent, AgentSession
 
 from src.services.livekit_service import livekit_service
 from src.services.plugins import FalSTT, FalLLM, FalTTS
 from src.utils.logger import get_logger, log_error
 
 logger = get_logger(__name__)
+
+
+class FalAssistant(Agent):
+    """Custom AI Assistant using FAL.AI plugins"""
+
+    def __init__(self, system_prompt: str = "You are a helpful AI assistant.") -> None:
+        super().__init__(instructions=system_prompt)
 
 
 class VoiceAgent:
@@ -29,7 +36,7 @@ class VoiceAgent:
         self.system_prompt = system_prompt or "You are a helpful AI assistant."
 
         self.room: Optional[rtc.Room] = None
-        self.assistant: Optional[VoiceAssistant] = None
+        self.session: Optional[AgentSession] = None
         self.is_running = False
 
     async def start(self) -> None:
@@ -52,27 +59,22 @@ class VoiceAgent:
             from src.constants.env import LIVEKIT_WS_URL
             await self.room.connect(LIVEKIT_WS_URL, token)
 
-            # Create voice assistant with FAL.AI plugins
-            self.assistant = VoiceAssistant(
-                vad=None,  # Use default VAD
+            # Create agent session with FAL.AI plugins
+            self.session = AgentSession(
                 stt=FalSTT(model="freya-stt-v1"),
                 llm=FalLLM(
                     model="meta-llama/llama-3.1-70b-instruct",
                     temperature=0.7
                 ),
                 tts=FalTTS(voice="alloy", speed=1.0),
-                chat_ctx=None,  # Will be initialized by assistant
+                vad=None,  # Use default VAD
             )
 
-            # Set system message
-            if self.assistant.chat_ctx:
-                self.assistant.chat_ctx.append(
-                    role="system",
-                    text=self.system_prompt
-                )
-
-            # Start assistant
-            self.assistant.start(self.room)
+            # Start session with custom assistant
+            await self.session.start(
+                room=self.room,
+                agent=FalAssistant(system_prompt=self.system_prompt)
+            )
 
             self.is_running = True
             logger.info("Voice agent started successfully", room=self.room_name)
@@ -88,9 +90,9 @@ class VoiceAgent:
 
             self.is_running = False
 
-            if self.assistant:
-                await self.assistant.aclose()
-                self.assistant = None
+            if self.session:
+                await self.session.aclose()
+                self.session = None
 
             if self.room:
                 await self.room.disconnect()

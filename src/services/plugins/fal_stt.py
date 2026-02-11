@@ -1,8 +1,7 @@
 """FAL.AI STT Plugin for LiveKit Agents"""
 
-from livekit.agents import stt
-from livekit.agents.stt import STT, SpeechEvent, SpeechEventType
-
+from livekit.agents.stt import STT, SpeechEvent, SpeechEventType, SpeechData
+from typing import Any
 from src.services.fal_ai import fal_ai_service
 from src.utils.logger import get_logger, log_error
 
@@ -18,10 +17,10 @@ class FalSTT(STT):
 
     async def recognize(
         self,
-        buffer: stt.AudioBuffer,
+        buffer: Any,
         *,
         language: str | None = None,
-    ) -> stt.SpeechEvent:
+    ) -> SpeechEvent:
         """Recognize speech from audio buffer"""
         try:
             # Convert AudioBuffer to bytes
@@ -35,14 +34,14 @@ class FalSTT(STT):
 
             text = result.get("text", "")
 
-            return stt.SpeechEvent(
+            return SpeechEvent(
                 type=SpeechEventType.FINAL_TRANSCRIPT,
-                alternatives=[stt.SpeechData(text=text, language=language or "en")],
+                alternatives=[SpeechData(text=text, language=language or "en")],
             )
 
         except Exception as e:
             log_error(logger, "FAL STT recognition failed", e)
-            return stt.SpeechEvent(
+            return SpeechEvent(
                 type=SpeechEventType.FINAL_TRANSCRIPT,
-                alternatives=[stt.SpeechData(text="", language=language or "en")],
+                alternatives=[SpeechData(text="", language=language or "en")],
             )

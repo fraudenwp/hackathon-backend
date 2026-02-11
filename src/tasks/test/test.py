@@ -5,4 +5,3 @@ from src.utils.logger import logger
 @broker.task
 async def test_task():
     logger.info("test_task tamamlandı")
-    return "test tamamlandı"

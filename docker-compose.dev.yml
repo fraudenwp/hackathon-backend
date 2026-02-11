@@ -20,7 +20,7 @@ x-common-env: &common-env
   LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
   LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
   LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
-  
+
 x-worker-env: &worker-env
   <<: *common-env
 
@@ -29,21 +29,14 @@ x-common-volumes: &common-volumes
 
 x-worker-command: &worker-command |
   sh -c "
-    pip install debugpy -t /tmp --upgrade &&
-    export PYTHONPATH=/tmp:$$PYTHONPATH &&
-    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --log-level=INFO
+    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --reload --log-level=INFO
   "
 services:
   web:
     build:
       context: .
       dockerfile: Dockerfile.dev
-    command:
-      [
-        "sh",
-        "-c",
-        "pip install debugpy && python3 -m debugpy --wait-for-client --listen 0.0.0.0:5678 -m uvicorn src:app --reload --workers 1 --host 0.0.0.0 --port 8000",
-      ]
+    command: [ "sh", "-c", "pip install debugpy && python3 -m debugpy --wait-for-client --listen 0.0.0.0:5678 -m uvicorn src:app --reload --workers 1 --host 0.0.0.0 --port 8000" ]
     volumes: *common-volumes
     ports:
       - 8004:8000
@@ -84,7 +77,28 @@ services:
     depends_on:
       - db
       - valkey-worker
-
+  worker-scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    command: "sh -c python -m debugpy --listen 0.0.0.0:6901 -m taskiq scheduler src.tasks.taskiq_setup:scheduler -fsd --reload --log-level=INFO"
+    volumes: *common-volumes
+    ports:
+      - 6901:6901
+    environment:
+      <<: *worker-env
+      COMMAND: worker
+      PYTHONDONTWRITEBYTECODE: 1
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.5"
+    depends_on:
+      - db
+      - valkey-worker
   valkey-worker:
     image: valkey/valkey:8.1.4
     expose:
@@ -98,14 +112,13 @@ services:
 
   db:
     image: postgres:17.6-bookworm
-    expose:
-      - 5436
     ports:
-      - 5436:5436
+      - 5436:5432
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=resai
+      - PGPORT=5432
     volumes:
       - postgres_data:/var/lib/postgresql/data
     deploy:
@@ -132,4 +145,3 @@ services:
 volumes:
   postgres_data:
     name: resai_postgres_data
-

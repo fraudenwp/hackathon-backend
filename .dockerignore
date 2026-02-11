@@ -13,10 +13,15 @@ venv/
 .venv
 .conda
 pip-log.txt
+pip-delete-this-directory.txt
 .tox/
 .coverage
 .coverage.*
 .cache
+nosetests.xml
+coverage.xml
 *.cover
 *.log
 .pytest_cache/ 
+./openapi.json
+chatbot_test_data/

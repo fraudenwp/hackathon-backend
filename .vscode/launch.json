@@ -9,6 +9,7 @@
       "configurations": [
         "Web: Remote Attach",
         "Taskiq: Remote Attach",
+        "Scheduler: Remote Attach"
       ]
     }
   ],
@@ -43,5 +44,20 @@
         }
       ]
     },
+    {
+      "name": "Scheduler: Remote Attach",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 6901
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/usr/src/app"
+        }
+      ]
+    }
   ]
 }
