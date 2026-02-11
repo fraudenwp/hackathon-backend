@@ -56,8 +56,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     debug=False,
-    title="TalenterAI API",
-    description="TalenterAI API Documentation",
+    title="Resai API",
+    description="Resai API Documentation",
     version=env.get("APP_VERSION", "1.0.0"),
     docs_url="/docs" if DEVELOPMENT else None,
     redoc_url="/redoc" if DEVELOPMENT else None,
@@ -143,7 +143,7 @@ for router in routers.__all__:
 
 @app.get("/")
 def index():
-    return f"TalenterAI API v{env.get('APP_VERSION', '1.0.0')}"
+    return f"Resai API v{env.get('APP_VERSION', '1.0.0')}"
 
 
 @app.get("/health")

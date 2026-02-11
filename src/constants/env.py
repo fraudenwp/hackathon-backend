@@ -66,10 +66,7 @@ DB_HOST = os.getenv("DB_HOST")
 DB_USER = os.getenv("DB_USER")
 DB_PASSWORD = os.getenv("DB_PASSWORD")
 DB_NAME = os.getenv("DB_NAME")
-DB_PORT = int(os.getenv("DB_PORT", 5432))
-DB_SECRET_ARN = os.getenv(
-    "DB_SECRET_ARN"
-)  # AWS Secrets Manager ARN for credential rotation
+DB_PORT = int(os.getenv("DB_PORT", 5436))
 
 if DB_HOST and DB_USER and DB_PASSWORD and DB_NAME:
     # AWS environment - construct from individual variables
@@ -79,18 +76,14 @@ if DB_HOST and DB_USER and DB_PASSWORD and DB_NAME:
 else:
     # Local development or DATABASE_URL provided directly
     DATABASE_URL = os.environ.get(
-        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@db:5432/talenterai"
+        "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@db:5436/resai"
     )
-
+FAL_API_KEY = os.getenv("FAL_API_KEY", "fal_api_key")
 SECRET_KEY = os.environ.get(
     "SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 )
 SECRET_KEY_ENCRYPTION = os.environ.get(
     "SECRET_KEY_ENCRYPTION", "B1xNfUQz9c2E9JHgW8Tf7kLzVZqcVGRlfKsff5HQZlI="
-)
-
-MEDIA_URL_PREFIX = os.environ.get(
-    "MEDIA_URL_PREFIX", "http://localhost:8004/media/download/"
 )
 
 
@@ -113,5 +106,3 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "r2_bucket_name")
 R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL", "r2_endpoint_url")
 R2_REGION_NAME = os.getenv("R2_REGION_NAME", "auto")
 
-WIROAI_API_KEY = os.getenv("WIROAI_API_KEY", "")
-WIROAI_API_SECRET = os.getenv("WIROAI_API_SECRET", "")

@@ -8,7 +8,6 @@ from src.crud.auth import AuthCRUD
 from src.crud.user import UserCRUD
 from src.models.basemodels.user import AccessToken
 from src.models.dependency import get_session
-from src.tasks.categories.templates.seed_templates import seed_templates_task
 
 
 class AuthController:
@@ -22,18 +21,7 @@ class AuthController:
         password: str = Form(...),
         db: AsyncSession = Depends(get_session),
     ):
-        from src.utils.logger import logger
-
         user = await UserCRUD.create(username, password, db)
-
-        # Trigger template seeding in background
-        try:
-            await seed_templates_task.kiq(user_id=user.id)
-            logger.info(f"Template seeding task queued for user {user.id}")
-        except Exception as e:
-            logger.error(f"Failed to queue template seeding task: {e}", exc_info=True)
-            # Don't fail signup if task queueing fails
-
         return user
 
     @staticmethod

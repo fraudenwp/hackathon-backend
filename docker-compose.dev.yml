@@ -4,7 +4,7 @@ x-common-env: &common-env
   VALKEY_WORKER_URL: ${VALKEY_WORKER_URL}
   SECRET_KEY: ${SECRET_KEY}
   SECRET_KEY_ENCRYPTION: ${SECRET_KEY_ENCRYPTION}
-  MEDIA_URL_PREFIX: ${MEDIA_URL_PREFIX}
+  FAL_API_KEY: ${FAL_API_KEY}
   DEVELOPMENT: ${DEVELOPMENT}
   JWT_SECRET_KEY: ${JWT_SECRET_KEY}
   JWT_ALGORITHM: ${JWT_ALGORITHM}
@@ -27,7 +27,7 @@ x-worker-command: &worker-command |
   sh -c "
     pip install debugpy -t /tmp --upgrade &&
     export PYTHONPATH=/tmp:$$PYTHONPATH &&
-    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --log-level=INFO
+    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker --reload -fsd --log-level=INFO
   "
 services:
   web:
@@ -95,13 +95,13 @@ services:
   db:
     image: postgres:17.6-bookworm
     expose:
-      - 5432
+      - 5436
     ports:
-      - 5432:5432
+      - 5436:5436
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=talenterai
+      - POSTGRES_DB=resai
     volumes:
       - postgres_data:/var/lib/postgresql/data
     deploy:
@@ -113,5 +113,5 @@ services:
 
 volumes:
   postgres_data:
-    name: talenterai_postgres_data
+    name: resai_postgres_data
 

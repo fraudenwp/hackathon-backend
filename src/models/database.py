@@ -41,7 +41,7 @@ class Database:
                     pool_reset_on_return="commit",  # Reset connections on return to pool
                     connect_args={
                         "server_settings": {
-                            "application_name": "talenterai_backend",
+                            "application_name": "resai_backend",
                             "jit": "off",  # Disable JIT for better connection stability
                             "statement_timeout": "1800000",  # Increased to 30 minutes for long-running tasks
                             "idle_in_transaction_session_timeout": "300000",  # Increased to 5 minutes for long operation

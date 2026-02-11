@@ -4,8 +4,8 @@ x-common-env: &common-env
   VALKEY_WORKER_URL: ${VALKEY_WORKER_URL}
   SECRET_KEY: ${SECRET_KEY}
   SECRET_KEY_ENCRYPTION: ${SECRET_KEY_ENCRYPTION}
-  MEDIA_URL_PREFIX: ${MEDIA_URL_PREFIX}
   DEVELOPMENT: "false"
+  FAL_API_KEY: ${FAL_API_KEY}
   JWT_SECRET_KEY: ${JWT_SECRET_KEY}
   JWT_ALGORITHM: ${JWT_ALGORITHM}
   JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES}
@@ -16,8 +16,6 @@ x-common-env: &common-env
   R2_BUCKET_NAME: ${R2_BUCKET_NAME}
   R2_ENDPOINT_URL: ${R2_ENDPOINT_URL}
   R2_REGION_NAME: ${R2_REGION_NAME}
-  WIROAI_API_KEY: ${WIROAI_API_KEY}
-  WIROAI_API_SECRET: ${WIROAI_API_SECRET}
 
 services:
   web:
@@ -56,7 +54,7 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - talenterai_network
+      - resai_network
     depends_on:
       valkey-worker:
         condition: service_started
@@ -87,7 +85,7 @@ services:
           memory: 2G
     restart: unless-stopped
     networks:
-      - talenterai_network
+      - resai_network
     depends_on:
       valkey-worker:
         condition: service_started
@@ -110,7 +108,7 @@ services:
     expose:
       - 6379
     networks:
-      - talenterai_network
+      - resai_network
     deploy:
       resources:
         limits:
@@ -135,8 +133,8 @@ services:
 
 volumes:
   valkey_data:
-    name: talenterai_valkey_data
+    name: resai_valkey_data
 
 networks:
-  talenterai_network:
+  resai_network:
     driver: bridge

@@ -33,7 +33,7 @@ def drop_color_message_key(_, __, event_dict: EventDict) -> EventDict:
     return event_dict
 
 
-logger_name = "talenterai." + COMMAND
+logger_name = "resai." + COMMAND
 
 
 def setup_logging(json_logs: bool = False, log_level: str = "INFO"):
