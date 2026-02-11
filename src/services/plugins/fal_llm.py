@@ -1,8 +1,13 @@
 """FAL.AI LLM Plugin for LiveKit Agents"""
 
-from livekit.agents import llm
-from livekit.agents.llm import LLM, ChatContext, ChatRole
+from __future__ import annotations
+
 from typing import Any
+
+from livekit.agents import llm
+from livekit.agents.llm import LLM, ChatContext, ChatChunk, ChoiceDelta, LLMStream, Tool
+from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions, NOT_GIVEN, NotGivenOr
+
 from src.services.fal_ai import fal_ai_service
 from src.utils.logger import get_logger, log_error
 
@@ -14,72 +19,64 @@ class FalLLM(LLM):
 
     def __init__(self, model: str = "meta-llama/llama-3.1-70b-instruct", temperature: float = 0.7):
         super().__init__()
-        self.model = model
-        self.temperature = temperature
+        self._model = model
+        self._temperature = temperature
 
-    async def chat(
+    def chat(
         self,
         *,
         chat_ctx: ChatContext,
-        fnc_ctx: Any | None = None,
-        temperature: float | None = None,
-        n: int = 1,
-    ) -> "llm.LLMStream":
-        """Generate chat response"""
-        try:
-            # Convert ChatContext to FAL.AI format
-            messages = []
-            for msg in chat_ctx.messages:
-                role = "user" if msg.role == ChatRole.USER else "assistant"
-                if msg.role == ChatRole.SYSTEM:
-                    role = "system"
-
-                messages.append({
-                    "role": role,
-                    "content": msg.content
-                })
-
-            # Call FAL.AI LLM
-            result = await fal_ai_service.generate_llm_response(
-                messages=messages,
-                model=self.model,
-                temperature=temperature or self.temperature,
-                max_tokens=150,
-            )
-
-            response_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-
-            # Return as stream (even though it's not streaming)
-            return FalLLMStream(response_text)
-
-        except Exception as e:
-            log_error(logger, "FAL LLM chat failed", e)
-            return FalLLMStream("")
+        tools: list[Tool] | None = None,
+        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
+        parallel_tool_calls: NotGivenOr[bool] = NOT_GIVEN,
+        tool_choice: NotGivenOr[llm.ToolChoice] = NOT_GIVEN,
+        extra_kwargs: NotGivenOr[dict[str, Any]] = NOT_GIVEN,
+    ) -> LLMStream:
+        return FalLLMStream(
+            llm=self,
+            chat_ctx=chat_ctx,
+            tools=tools or [],
+            conn_options=conn_options,
+            model=self._model,
+            temperature=self._temperature,
+        )
 
 
-class FalLLMStream(llm.LLMStream):
+class FalLLMStream(LLMStream):
     """Stream wrapper for FAL.AI responses"""
 
-    def __init__(self, text: str):
-        super().__init__(llm=None, chat_ctx=None)
-        self._text = text
-        self._done = False
+    def __init__(
+        self,
+        *,
+        llm: FalLLM,
+        chat_ctx: ChatContext,
+        tools: list[Tool],
+        conn_options: APIConnectOptions,
+        model: str,
+        temperature: float,
+    ) -> None:
+        super().__init__(llm=llm, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options)
+        self._model = model
+        self._temperature = temperature
 
-    async def aclose(self) -> None:
-        pass
+    async def _run(self) -> None:
+        """Stream tokens from FAL.AI to minimize time-to-first-byte."""
+        messages = []
+        for msg in self._chat_ctx.items:
+            messages.append({"role": msg.role, "content": msg.text_content or ""})
 
-    async def __anext__(self) -> llm.ChatChunk:
-        if self._done:
-            raise StopAsyncIteration
+        request_id = "fal-response"
 
-        self._done = True
-        return llm.ChatChunk(
-            choices=[
-                llm.Choice(
-                    delta=llm.ChoiceDelta(
-                        role=ChatRole.ASSISTANT,
-                        content=self._text
-                    )
+        # Stream token by token — each delta goes to TTS immediately
+        async for token in fal_ai_service.generate_llm_response_stream(
+            messages=messages,
+            model=self._model,
+            temperature=self._temperature,
+            max_tokens=150,
+        ):
+            self._event_ch.send_nowait(
+                ChatChunk(
+                    id=request_id,
+                    delta=ChoiceDelta(role="assistant", content=token),
                 )
-            ]
-        )
+            )

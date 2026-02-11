@@ -35,3 +35,5 @@ livekit
 livekit-api
 livekit-agents
 livekit-plugins-openai
+livekit-plugins-silero
+httpx[http2]

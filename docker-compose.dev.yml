@@ -29,7 +29,7 @@ x-common-volumes: &common-volumes
 
 x-worker-command: &worker-command |
   sh -c "
-    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --reload --log-level=INFO
+    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --log-level=INFO
   "
 services:
   web:
@@ -77,28 +77,7 @@ services:
     depends_on:
       - db
       - valkey-worker
-  worker-scheduler:
-    build:
-      context: .
-      dockerfile: Dockerfile.dev
-    command: "sh -c python -m debugpy --listen 0.0.0.0:6901 -m taskiq scheduler src.tasks.taskiq_setup:scheduler -fsd --reload --log-level=INFO"
-    volumes: *common-volumes
-    ports:
-      - 6901:6901
-    environment:
-      <<: *worker-env
-      COMMAND: worker
-      PYTHONDONTWRITEBYTECODE: 1
-    deploy:
-      resources:
-        limits:
-          cpus: "1.0"
-          memory: 1024M
-        reservations:
-          cpus: "0.5"
-    depends_on:
-      - db
-      - valkey-worker
+
   valkey-worker:
     image: valkey/valkey:8.1.4
     expose:

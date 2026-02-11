@@ -22,26 +22,27 @@ class FalAIService:
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or FAL_API_KEY
+        # Persistent client — reuses TCP connections (eliminates per-request TLS handshake)
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(30.0, connect=10.0),
+            headers={
+                "Authorization": f"Key {self.api_key}",
+                "Content-Type": "application/json",
+            },
+            http2=True,
+        )
 
-    def _get_headers(self) -> Dict[str, str]:
-        return {
-            "Authorization": f"Key {self.api_key}",
-            "Content-Type": "application/json",
-        }
+    async def aclose(self) -> None:
+        await self._client.aclose()
 
     async def transcribe_audio(self, **kwargs: Any) -> Dict[str, Any]:
         """STT: https://fal.run/freya-mypsdi253hbk/freya-stt/audio/transcriptions"""
         endpoint = f"{self.BASE_URL}/{self.STT_ENDPOINT}"
 
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(
-                    endpoint,
-                    headers=self._get_headers(),
-                    json=kwargs,
-                )
-                response.raise_for_status()
-                return response.json()
+            response = await self._client.post(endpoint, json=kwargs)
+            response.raise_for_status()
+            return response.json()
 
         except httpx.HTTPError as e:
             log_error(
@@ -73,14 +74,9 @@ class FalAIService:
                 **kwargs,
             }
 
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(
-                    endpoint,
-                    headers=self._get_headers(),
-                    json=payload,
-                )
-                response.raise_for_status()
-                return response.content
+            response = await self._client.post(endpoint, json=payload)
+            response.raise_for_status()
+            return response.content
 
         except httpx.HTTPError as e:
             log_error(
@@ -113,16 +109,12 @@ class FalAIService:
                 **kwargs,
             }
 
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                async with client.stream(
-                    "POST",
-                    endpoint,
-                    headers=self._get_headers(),
-                    json=payload,
-                ) as response:
-                    response.raise_for_status()
-                    async for chunk in response.aiter_bytes(chunk_size=chunk_size):
-                        yield chunk
+            async with self._client.stream(
+                "POST", endpoint, json=payload
+            ) as response:
+                response.raise_for_status()
+                async for chunk in response.aiter_bytes(chunk_size=chunk_size):
+                    yield chunk
 
         except httpx.HTTPError as e:
             log_error(
@@ -143,21 +135,10 @@ class FalAIService:
         response_format: Optional[Dict] = None,
         **kwargs: Any,
     ) -> Dict[str, Any]:
-        """
-        LLM: https://fal.run/openrouter/router/openai/v1/responses
-
-        OpenAI-compatible endpoint supporting:
-        - messages: conversation history
-        - model: model selection
-        - tools: function/tool definitions
-        - tool_choice: auto/required/none or specific tool
-        - response_format: JSON mode, etc.
-        - temperature, max_tokens, stream, etc.
-        """
+        """LLM: https://fal.run/openrouter/router/openai/v1/responses"""
         endpoint = f"{self.BASE_URL}/{self.LLM_ENDPOINT}"
 
         payload = {**kwargs}
-
         if messages is not None:
             payload["messages"] = messages
         if model is not None:
@@ -170,19 +151,70 @@ class FalAIService:
             payload["response_format"] = response_format
 
         try:
-            async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(
-                    endpoint,
-                    headers=self._get_headers(),
-                    json=payload,
-                )
-                response.raise_for_status()
-                return response.json()
+            response = await self._client.post(endpoint, json=payload)
+            response.raise_for_status()
+            return response.json()
 
         except httpx.HTTPError as e:
             log_error(
                 logger,
                 "LLM failed",
+                e,
+                endpoint=endpoint,
+                status_code=getattr(e.response, "status_code", None),
+            )
+            raise
+
+    async def generate_llm_response_stream(
+        self,
+        messages: Optional[list] = None,
+        model: Optional[str] = None,
+        tools: Optional[list] = None,
+        tool_choice: Optional[str | Dict] = None,
+        response_format: Optional[Dict] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[str]:
+        """Streaming LLM — yields SSE delta content tokens."""
+        import json as _json
+
+        endpoint = f"{self.BASE_URL}/{self.LLM_ENDPOINT}"
+
+        payload: Dict[str, Any] = {"stream": True, **kwargs}
+        if messages is not None:
+            payload["messages"] = messages
+        if model is not None:
+            payload["model"] = model
+        if tools is not None:
+            payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+        if response_format is not None:
+            payload["response_format"] = response_format
+
+        try:
+            async with self._client.stream(
+                "POST", endpoint, json=payload
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    chunk = _json.loads(data)
+                    delta = (
+                        chunk.get("choices", [{}])[0]
+                        .get("delta", {})
+                        .get("content")
+                    )
+                    if delta:
+                        yield delta
+
+        except httpx.HTTPError as e:
+            log_error(
+                logger,
+                "LLM stream failed",
                 e,
                 endpoint=endpoint,
                 status_code=getattr(e.response, "status_code", None),

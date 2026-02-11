@@ -7,6 +7,7 @@ from typing import Dict, Optional
 
 from livekit import rtc
 from livekit.agents import Agent, AgentSession
+from livekit.plugins.silero import VAD
 
 from src.services.livekit_service import livekit_service
 from src.services.plugins import FalSTT, FalLLM, FalTTS
@@ -67,7 +68,7 @@ class VoiceAgent:
                     temperature=0.7
                 ),
                 tts=FalTTS(voice="alloy", speed=1.0),
-                vad=None,  # Use default VAD
+                vad=VAD.load(),
             )
 
             # Start session with custom assistant

@@ -1,79 +1,77 @@
 """FAL.AI TTS Plugin for LiveKit Agents"""
 
+from __future__ import annotations
+
 from livekit.agents import tts
-from livekit.agents.tts import TTS, SynthesizedAudio
+from livekit.agents.tts import TTS, TTSCapabilities, ChunkedStream
+from livekit.agents.tts.tts import AudioEmitter
+from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions
 
 from src.services.fal_ai import fal_ai_service
-from src.utils.logger import get_logger, log_error
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+SAMPLE_RATE = 24000
+NUM_CHANNELS = 1
 
 
 class FalTTS(TTS):
     """FAL.AI Text-to-Speech plugin for LiveKit Agents"""
 
     def __init__(self, voice: str = "alloy", speed: float = 1.0):
-        super().__init__(streaming_supported=True, sample_rate=24000, num_channels=1)
-        self.voice = voice
-        self.speed = speed
+        super().__init__(
+            capabilities=TTSCapabilities(streaming=False),
+            sample_rate=SAMPLE_RATE,
+            num_channels=NUM_CHANNELS,
+        )
+        self._voice = voice
+        self._speed = speed
 
-    def synthesize(self, text: str) -> "FalTTSStream":
-        """Synthesize text to speech"""
-        return FalTTSStream(
-            text=text,
-            voice=self.voice,
-            speed=self.speed,
-            sample_rate=self._sample_rate,
-            num_channels=self._num_channels,
+    def synthesize(
+        self, text: str, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS
+    ) -> ChunkedStream:
+        return FalTTSChunkedStream(
+            tts=self,
+            input_text=text,
+            conn_options=conn_options,
+            voice=self._voice,
+            speed=self._speed,
         )
 
 
-class FalTTSStream(tts.ChunkedStream):
-    """Streaming TTS from FAL.AI"""
+class FalTTSChunkedStream(ChunkedStream):
+    """Chunked TTS stream from FAL.AI"""
 
     def __init__(
         self,
-        text: str,
+        *,
+        tts: FalTTS,
+        input_text: str,
+        conn_options: APIConnectOptions,
         voice: str,
         speed: float,
-        sample_rate: int,
-        num_channels: int,
-    ):
-        super().__init__()
-        self._text = text
+    ) -> None:
+        super().__init__(tts=tts, input_text=input_text, conn_options=conn_options)
         self._voice = voice
         self._speed = speed
-        self._sample_rate = sample_rate
-        self._num_channels = num_channels
-        self._stream = None
 
-    async def _run(self):
-        """Stream audio chunks from FAL.AI"""
-        try:
-            # Get streaming audio from FAL.AI
-            async for audio_chunk in fal_ai_service.synthesize_speech_stream(
-                input=self._text,
-                voice=self._voice,
-                speed=self._speed,
-                response_format="wav",
-            ):
-                if audio_chunk:
-                    # Create audio frame
-                    frame = tts.AudioFrame(
-                        data=audio_chunk,
-                        sample_rate=self._sample_rate,
-                        num_channels=self._num_channels,
-                        samples_per_channel=len(audio_chunk) // (2 * self._num_channels),
-                    )
-                    self._event_ch.send_nowait(
-                        tts.SynthesizedAudio(
-                            request_id="",
-                            frame=frame,
-                        )
-                    )
+    async def _run(self, output_emitter: AudioEmitter) -> None:
+        """Stream audio chunks from FAL.AI using AudioEmitter pattern."""
+        output_emitter.initialize(
+            request_id="fal-tts",
+            sample_rate=SAMPLE_RATE,
+            num_channels=NUM_CHANNELS,
+            mime_type="audio/wav",
+        )
 
-        except Exception as e:
-            log_error(logger, "FAL TTS streaming failed", e)
+        async for audio_chunk in fal_ai_service.synthesize_speech_stream(
+            input=self.input_text,
+            voice=self._voice,
+            speed=self._speed,
+            response_format="wav",
+        ):
+            if audio_chunk:
+                output_emitter.push(audio_chunk)
 
-        finally:
-            await self.aclose()
+        output_emitter.flush()
