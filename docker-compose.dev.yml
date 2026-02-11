@@ -16,6 +16,10 @@ x-common-env: &common-env
   R2_BUCKET_NAME: ${R2_BUCKET_NAME}
   R2_ENDPOINT_URL: ${R2_ENDPOINT_URL}
   R2_REGION_NAME: ${R2_REGION_NAME}
+  LIVEKIT_URL: ${LIVEKIT_URL}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+  LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
   
 x-worker-env: &worker-env
   <<: *common-env
@@ -27,7 +31,7 @@ x-worker-command: &worker-command |
   sh -c "
     pip install debugpy -t /tmp --upgrade &&
     export PYTHONPATH=/tmp:$$PYTHONPATH &&
-    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker --reload -fsd --log-level=INFO
+    python -m debugpy --listen 0.0.0.0:6900 -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --log-level=INFO
   "
 services:
   web:
@@ -110,6 +114,20 @@ services:
           memory: 512M
         reservations:
           memory: 256M
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml --dev
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    volumes:
+      - ./livekit-config.yaml:/etc/livekit.yaml:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
 
 volumes:
   postgres_data:

@@ -106,3 +106,9 @@ R2_BUCKET_NAME = os.getenv("R2_BUCKET_NAME", "r2_bucket_name")
 R2_ENDPOINT_URL = os.getenv("R2_ENDPOINT_URL", "r2_endpoint_url")
 R2_REGION_NAME = os.getenv("R2_REGION_NAME", "auto")
 
+# LiveKit Configuration
+LIVEKIT_URL = os.getenv("LIVEKIT_URL", "http://livekit:7880")
+LIVEKIT_API_KEY = os.getenv("LIVEKIT_API_KEY", "devkey")
+LIVEKIT_API_SECRET = os.getenv("LIVEKIT_API_SECRET", "secret")
+LIVEKIT_WS_URL = os.getenv("LIVEKIT_WS_URL", "ws://localhost:7880")
+

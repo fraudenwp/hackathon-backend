@@ -16,6 +16,10 @@ x-common-env: &common-env
   R2_BUCKET_NAME: ${R2_BUCKET_NAME}
   R2_ENDPOINT_URL: ${R2_ENDPOINT_URL}
   R2_REGION_NAME: ${R2_REGION_NAME}
+  LIVEKIT_URL: ${LIVEKIT_URL}
+  LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+  LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+  LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
 
 services:
   web:
@@ -130,6 +134,41 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: --config /etc/livekit.yaml
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    expose:
+      - 7880
+      - 7881
+    volumes:
+      - ./livekit-config.yaml:/etc/livekit.yaml:ro
+    networks:
+      - resai_network
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "1.0"
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7880/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   valkey_data:

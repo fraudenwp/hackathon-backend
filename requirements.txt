@@ -14,12 +14,14 @@ aiofiles==25.1.0
     # via
     #   aioboto3
     #   livekit
+    #   livekit-agents
 aiohappyeyeballs==2.6.1
     # via aiohttp
 aiohttp[speedups]==3.13.3
     # via
     #   -r requirements.in
     #   aiobotocore
+    #   livekit-agents
     #   livekit-api
     #   taskiq
 aioitertools==0.13.0
@@ -32,6 +34,8 @@ alembic==1.18.3
     #   alembic-postgresql-enum
 alembic-postgresql-enum==1.9.0
     # via -r requirements.in
+annotated-doc==0.0.4
+    # via typer
 annotated-types==0.7.0
     # via pydantic
 anyio==4.12.1
@@ -48,6 +52,8 @@ asyncpg==0.31.0
     # via -r requirements.in
 attrs==25.4.0
     # via aiohttp
+av==16.1.0
+    # via livekit-agents
 backports-zstd==1.3.0
     # via aiohttp
 bcrypt==4.0.1
@@ -67,15 +73,22 @@ certifi==2026.1.4
     # via
     #   httpcore
     #   httpx
+    #   livekit-agents
     #   requests
 cffi==2.0.0
     # via
     #   cryptography
     #   pycares
+    #   sounddevice
 charset-normalizer==3.4.4
     # via requests
 click==8.3.1
-    # via uvicorn
+    # via
+    #   livekit-agents
+    #   typer
+    #   uvicorn
+colorama==0.4.6
+    # via livekit-agents
 croniter==6.0.0
     # via -r requirements.in
 cryptography==46.0.4
@@ -88,10 +101,14 @@ distro==1.9.0
     #   openai
 dnspython==2.8.0
     # via email-validator
+docstring-parser==0.17.0
+    # via livekit-agents
 ecdsa==0.19.1
     # via python-jose
 email-validator==2.2.0
     # via -r requirements.in
+eval-type-backport==0.3.1
+    # via livekit-agents
 fastapi==0.115.14
     # via
     #   -r requirements.in
@@ -108,6 +125,12 @@ google-auth[requests]==2.48.0
     # via google-genai
 google-genai==1.62.0
     # via -r requirements.in
+googleapis-common-protos==1.72.0
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+grpcio==1.78.0
+    # via opentelemetry-exporter-otlp-proto-grpc
 h11==0.16.0
     # via
     #   httpcore
@@ -127,6 +150,8 @@ idna==3.11
     #   httpx
     #   requests
     #   yarl
+importlib-metadata==8.7.1
+    # via opentelemetry-api
 izulu==0.50.0
     # via taskiq
 jiter==0.13.0
@@ -136,23 +161,77 @@ jmespath==1.1.0
     #   boto3
     #   botocore
 livekit==1.0.25
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   livekit-agents
+livekit-agents[codecs,images]==1.4.1
+    # via
+    #   -r requirements.in
+    #   livekit-plugins-openai
 livekit-api==1.1.0
+    # via
+    #   -r requirements.in
+    #   livekit-agents
+livekit-blingfire==1.1.0
+    # via livekit-agents
+livekit-plugins-openai==1.4.1
     # via -r requirements.in
 livekit-protocol==1.1.2
-    # via livekit-api
+    # via
+    #   livekit-agents
+    #   livekit-api
 mako==1.3.10
     # via alembic
+markdown-it-py==4.0.0
+    # via rich
 markupsafe==3.0.3
     # via mako
+mdurl==0.1.2
+    # via markdown-it-py
 multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
+nest-asyncio==1.6.0
+    # via livekit-agents
 numpy==2.4.2
-    # via livekit
-openai==2.17.0
-    # via -r requirements.in
+    # via
+    #   livekit
+    #   livekit-agents
+openai[realtime]==2.17.0
+    # via
+    #   -r requirements.in
+    #   livekit-agents
+    #   livekit-plugins-openai
+opentelemetry-api==1.39.1
+    # via
+    #   livekit-agents
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+opentelemetry-exporter-otlp==1.39.1
+    # via livekit-agents
+opentelemetry-exporter-otlp-proto-common==1.39.1
+    # via
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-grpc==1.39.1
+    # via opentelemetry-exporter-otlp
+opentelemetry-exporter-otlp-proto-http==1.39.1
+    # via opentelemetry-exporter-otlp
+opentelemetry-proto==1.39.1
+    # via
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-sdk==1.39.1
+    # via
+    #   livekit-agents
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-semantic-conventions==0.60b1
+    # via opentelemetry-sdk
 orjson==3.11.7
     # via taskiq
 packaging==26.0
@@ -164,18 +243,26 @@ passlib[bcrypt]==1.7.4
 pillow==12.1.0
     # via
     #   -r requirements.in
+    #   livekit-agents
     #   pillow-heif
 pillow-heif==1.2.0
     # via -r requirements.in
+prometheus-client==0.24.1
+    # via livekit-agents
 propcache==0.4.1
     # via
     #   aiohttp
     #   yarl
 protobuf==6.33.5
     # via
+    #   googleapis-common-protos
     #   livekit
+    #   livekit-agents
     #   livekit-api
     #   livekit-protocol
+    #   opentelemetry-proto
+psutil==7.2.2
+    # via livekit-agents
 psycopg2-binary==2.9.11
     # via -r requirements.in
 pyasn1==0.6.2
@@ -196,13 +283,18 @@ pydantic==2.11.10
     #   -r requirements.in
     #   fastapi
     #   google-genai
+    #   livekit-agents
     #   openai
     #   sqlmodel
     #   taskiq
 pydantic-core==2.33.2
     # via pydantic
+pygments==2.19.2
+    # via rich
 pyjwt==2.11.0
-    # via livekit-api
+    # via
+    #   livekit-agents
+    #   livekit-api
 pypdf==6.7.0
     # via -r requirements.in
 pypdf2==3.0.1
@@ -229,12 +321,17 @@ requests==2.32.5
     # via
     #   google-auth
     #   google-genai
+    #   opentelemetry-exporter-otlp-proto-http
+rich==14.3.2
+    # via typer
 rsa==4.9.1
     # via
     #   google-auth
     #   python-jose
 s3transfer==0.10.4
     # via boto3
+shellingham==1.5.4
+    # via typer
 six==1.17.0
     # via
     #   ecdsa
@@ -243,6 +340,8 @@ sniffio==1.3.1
     # via
     #   google-genai
     #   openai
+sounddevice==0.5.5
+    # via livekit-agents
 sqlalchemy==2.0.46
     # via
     #   -r requirements.in
@@ -278,9 +377,12 @@ text-unidecode==1.3
     # via python-slugify
 tqdm==4.67.3
     # via openai
+typer==0.23.0
+    # via livekit-agents
 types-protobuf==6.32.1.20251210
     # via
     #   livekit
+    #   livekit-agents
     #   livekit-api
     #   livekit-protocol
 typing-extensions==4.15.0
@@ -288,7 +390,14 @@ typing-extensions==4.15.0
     #   alembic
     #   fastapi
     #   google-genai
+    #   grpcio
+    #   livekit-agents
     #   openai
+    #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
     #   pydantic
     #   pydantic-core
     #   sqlalchemy
@@ -306,13 +415,18 @@ uvloop==0.22.1
 watchdog==6.0.0
     # via taskiq
 watchfiles==1.1.1
-    # via uvicorn
+    # via
+    #   livekit-agents
+    #   uvicorn
 websockets==15.0.1
     # via
     #   -r requirements.in
     #   google-genai
+    #   openai
     #   uvicorn
 wrapt==1.17.3
     # via aiobotocore
 yarl==1.22.0
     # via aiohttp
+zipp==3.23.0
+    # via importlib-metadata

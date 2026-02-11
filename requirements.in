@@ -33,3 +33,5 @@ pillow>=10.0.0
 pillow-heif>=0.13.0
 livekit
 livekit-api
+livekit-agents
+livekit-plugins-openai
