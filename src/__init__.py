@@ -36,6 +36,7 @@ class ErrorMonitoringMiddleware(BaseHTTPMiddleware):
             )
             raise
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup

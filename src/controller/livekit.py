@@ -19,7 +19,10 @@ from src.services.livekit_service import livekit_service
 from src.services.voice_agent import get_agent
 from src.crud import voice_conversation
 from src.constants.env import LIVEKIT_WS_URL
-from src.tasks.voice.voice_agent_task import start_voice_agent_task, stop_voice_agent_task
+from src.tasks.voice.voice_agent_task import (
+    start_voice_agent_task,
+    stop_voice_agent_task,
+)
 
 
 class LiveKitController:
@@ -64,7 +67,7 @@ class LiveKitController:
         token = await livekit_service.generate_token(
             room_name=room_name,
             participant_identity=str(current_user.id),
-            participant_name=current_user.email,
+            participant_name=current_user.username,
             metadata={"user_id": str(current_user.id)},
         )
 
@@ -134,7 +137,7 @@ class LiveKitController:
         token = await livekit_service.generate_token(
             room_name=room_name,
             participant_identity=str(current_user.id),
-            participant_name=current_user.email,
+            participant_name=current_user.username,
             metadata={"user_id": str(current_user.id)},
         )
 
@@ -208,7 +211,9 @@ class LiveKitController:
         await livekit_service.delete_room(room_name)
 
         # Update DB
-        await voice_conversation.end_conversation(db=db, conversation_id=conversation.id)
+        await voice_conversation.end_conversation(
+            db=db, conversation_id=conversation.id
+        )
 
         return {"message": "Room deleted successfully"}
 

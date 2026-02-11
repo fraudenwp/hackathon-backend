@@ -7,11 +7,16 @@ from livekit.agents.stt import (
     SpeechEventType,
     SpeechData,
 )
-from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions, NOT_GIVEN, NotGivenOr
+from livekit.agents.types import (
+    DEFAULT_API_CONNECT_OPTIONS,
+    APIConnectOptions,
+    NOT_GIVEN,
+    NotGivenOr,
+)
 from livekit.agents.utils.audio import AudioBuffer
 
 from src.services.fal_ai import fal_ai_service
-from src.utils.logger import get_logger, log_error
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -20,7 +25,9 @@ class FalSTT(STT):
     """FAL.AI Speech-to-Text plugin for LiveKit Agents"""
 
     def __init__(self, model: str = "freya-stt-v1"):
-        super().__init__(capabilities=STTCapabilities(streaming=False, interim_results=False))
+        super().__init__(
+            capabilities=STTCapabilities(streaming=False, interim_results=False)
+        )
         self.model = model
 
     async def _recognize_impl(

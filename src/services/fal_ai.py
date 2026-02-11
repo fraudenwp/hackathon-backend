@@ -109,9 +109,7 @@ class FalAIService:
                 **kwargs,
             }
 
-            async with self._client.stream(
-                "POST", endpoint, json=payload
-            ) as response:
+            async with self._client.stream("POST", endpoint, json=payload) as response:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes(chunk_size=chunk_size):
                     yield chunk
@@ -192,9 +190,7 @@ class FalAIService:
             payload["response_format"] = response_format
 
         try:
-            async with self._client.stream(
-                "POST", endpoint, json=payload
-            ) as response:
+            async with self._client.stream("POST", endpoint, json=payload) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line.startswith("data: "):
@@ -204,9 +200,7 @@ class FalAIService:
                         break
                     chunk = _json.loads(data)
                     delta = (
-                        chunk.get("choices", [{}])[0]
-                        .get("delta", {})
-                        .get("content")
+                        chunk.get("choices", [{}])[0].get("delta", {}).get("content")
                     )
                     if delta:
                         yield delta

@@ -8,7 +8,9 @@ import uuid
 class VoiceConversation(SQLModel, table=True):
     __tablename__ = "voice_conversations"
 
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True, index=True)
+    id: str = Field(
+        default_factory=lambda: str(uuid.uuid4()), primary_key=True, index=True
+    )
     user_id: str = Field(foreign_key="user.id", index=True)
     room_name: str = Field(index=True, unique=True)
     room_sid: Optional[str] = None
@@ -22,7 +24,7 @@ class VoiceConversation(SQLModel, table=True):
     total_duration_seconds: int = Field(default=0)
     participant_count: int = Field(default=0)
 
-    config: Dict = Field(sa_column=Column(JSON, nullable=False))
+    config: Dict = Field(default={}, sa_column=Column(JSON, nullable=False))
 
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(
@@ -30,13 +32,12 @@ class VoiceConversation(SQLModel, table=True):
         sa_column_kwargs=dict(onupdate=datetime.now),
     )
 
+
 class VoiceMessage(SQLModel, table=True):
     __tablename__ = "voice_messages"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    conversation_id: str = Field(
-        foreign_key="voice_conversations.id", index=True
-    )
+    conversation_id: str = Field(foreign_key="voice_conversations.id", index=True)
 
     participant_identity: str = Field(index=True)
     participant_name: str = Field(...)

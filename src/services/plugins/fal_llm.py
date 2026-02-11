@@ -6,10 +6,15 @@ from typing import Any
 
 from livekit.agents import llm
 from livekit.agents.llm import LLM, ChatContext, ChatChunk, ChoiceDelta, LLMStream, Tool
-from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions, NOT_GIVEN, NotGivenOr
+from livekit.agents.types import (
+    DEFAULT_API_CONNECT_OPTIONS,
+    APIConnectOptions,
+    NOT_GIVEN,
+    NotGivenOr,
+)
 
 from src.services.fal_ai import fal_ai_service
-from src.utils.logger import get_logger, log_error
+from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -17,7 +22,9 @@ logger = get_logger(__name__)
 class FalLLM(LLM):
     """FAL.AI LLM plugin for LiveKit Agents"""
 
-    def __init__(self, model: str = "meta-llama/llama-3.1-70b-instruct", temperature: float = 0.7):
+    def __init__(
+        self, model: str = "meta-llama/llama-3.1-70b-instruct", temperature: float = 0.7
+    ):
         super().__init__()
         self._model = model
         self._temperature = temperature
@@ -55,7 +62,9 @@ class FalLLMStream(LLMStream):
         model: str,
         temperature: float,
     ) -> None:
-        super().__init__(llm=llm, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options)
+        super().__init__(
+            llm=llm, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options
+        )
         self._model = model
         self._temperature = temperature
 

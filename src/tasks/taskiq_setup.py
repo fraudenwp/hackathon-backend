@@ -11,6 +11,7 @@ from taskiq_redis import (
     RedisAsyncResultBackend,
     RedisStreamBroker,
 )
+from taskiq.abc.broker import AsyncBroker
 
 from src.constants.env import (
     VALKEY_WORKER_URL,
@@ -193,7 +194,9 @@ def create_broker(url: str) -> RedisStreamBroker:
     except Exception as e:
         log_error(logger, "Broker creation failed", e)
         raise
-broker= create_broker(VALKEY_WORKER_URL)
+
+
+broker = create_broker(VALKEY_WORKER_URL)
 
 
 # =============================================================================
@@ -223,7 +226,6 @@ except Exception as e:
 # =============================================================================
 # Routing Broker (Proxy for Scheduler)
 # =============================================================================
-from taskiq.abc.broker import AsyncBroker
 
 
 class RoutingBroker(AsyncBroker):
@@ -248,6 +250,7 @@ class RoutingBroker(AsyncBroker):
         # In DEVELOPMENT mode, all brokers point to the same instance
         # Use a set to get unique broker instances and avoid duplicate shutdown calls
         await self.broker.shutdown()
+
     async def kick(self, message: TaskiqMessage) -> None:
         # Check if the task is known to the high priority broker
         # We check both custom task names and potentially decorated tasks
@@ -267,9 +270,7 @@ class RoutingBroker(AsyncBroker):
         pass
 
 
-scheduler_broker = RoutingBroker(
-    broker=broker
-)
+scheduler_broker = RoutingBroker(broker=broker)
 logger.info("Scheduler RoutingBroker initialized for multi-priority dispatch")
 
 scheduler = TaskiqScheduler(

@@ -13,3 +13,4 @@ dump.rdb
 .env.production
 .env.local
 .env.*.local
+CLAUDE.md

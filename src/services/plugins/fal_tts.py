@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from livekit.agents import tts
 from livekit.agents.tts import TTS, TTSCapabilities, ChunkedStream
 from livekit.agents.tts.tts import AudioEmitter
 from livekit.agents.types import DEFAULT_API_CONNECT_OPTIONS, APIConnectOptions
@@ -29,7 +28,10 @@ class FalTTS(TTS):
         self._speed = speed
 
     def synthesize(
-        self, text: str, *, conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS
+        self,
+        text: str,
+        *,
+        conn_options: APIConnectOptions = DEFAULT_API_CONNECT_OPTIONS,
     ) -> ChunkedStream:
         return FalTTSChunkedStream(
             tts=self,

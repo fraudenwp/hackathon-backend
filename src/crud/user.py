@@ -32,10 +32,13 @@ class UserCRUD:
         except Exception as e:
             await db.rollback()
             # Check if it's a unique constraint violation
-            if "UniqueViolationError" in str(type(e)) or "unique constraint" in str(e).lower():
+            if (
+                "UniqueViolationError" in str(type(e))
+                or "unique constraint" in str(e).lower()
+            ):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Bu kullanıcı adı zaten kullanılıyor"
+                    detail="Bu kullanıcı adı zaten kullanılıyor",
                 )
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 

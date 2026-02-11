@@ -1,8 +1,12 @@
 """Voice agent background tasks"""
+
 from typing import Optional
 
 from src.tasks.taskiq_setup import broker
-from src.services.voice_agent import start_agent as _start_agent, stop_agent as _stop_agent
+from src.services.voice_agent import (
+    start_agent as _start_agent,
+    stop_agent as _stop_agent,
+)
 from src.utils.logger import logger
 
 

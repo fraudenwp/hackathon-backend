@@ -2,7 +2,6 @@
 Voice AI Agent - Using LiveKit Agents framework with FAL.AI
 """
 
-import asyncio
 from typing import Dict, Optional
 
 from livekit import rtc
@@ -58,23 +57,20 @@ class VoiceAgent:
 
             # Connect to room
             from src.constants.env import LIVEKIT_WS_URL
+
             await self.room.connect(LIVEKIT_WS_URL, token)
 
             # Create agent session with FAL.AI plugins
             self.session = AgentSession(
                 stt=FalSTT(model="freya-stt-v1"),
-                llm=FalLLM(
-                    model="meta-llama/llama-3.1-70b-instruct",
-                    temperature=0.7
-                ),
+                llm=FalLLM(model="meta-llama/llama-3.1-70b-instruct", temperature=0.7),
                 tts=FalTTS(voice="alloy", speed=1.0),
                 vad=VAD.load(),
             )
 
             # Start session with custom assistant
             await self.session.start(
-                room=self.room,
-                agent=FalAssistant(system_prompt=self.system_prompt)
+                room=self.room, agent=FalAssistant(system_prompt=self.system_prompt)
             )
 
             self.is_running = True
@@ -109,7 +105,9 @@ class VoiceAgent:
 active_agents: Dict[str, VoiceAgent] = {}
 
 
-async def start_agent(room_name: str, system_prompt: Optional[str] = None) -> VoiceAgent:
+async def start_agent(
+    room_name: str, system_prompt: Optional[str] = None
+) -> VoiceAgent:
     """Start a voice agent in a room"""
     if room_name in active_agents:
         raise ValueError(f"Agent already running in room {room_name}")

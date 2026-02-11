@@ -36,7 +36,9 @@ class LiveKitService:
     def lk_api(self):
         """Lazy initialize LiveKit API client"""
         if self._lk_api is None:
-            self._lk_api = self._create_livekit_api(self.url, self.api_key, self.api_secret)
+            self._lk_api = self._create_livekit_api(
+                self.url, self.api_key, self.api_secret
+            )
         return self._lk_api
 
     async def generate_token(

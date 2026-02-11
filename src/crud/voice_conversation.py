@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 
-from src.models.sqlmodels.voice_conversation import VoiceConversation, VoiceMessage
+from src.models.sqlmodels.voice_conversation import VoiceConversation
 
 
 async def create_conversation(
