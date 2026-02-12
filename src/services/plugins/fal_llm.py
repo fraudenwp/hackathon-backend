@@ -72,6 +72,8 @@ class FalLLMStream(LLMStream):
         """Stream tokens from FAL.AI to minimize time-to-first-byte."""
         messages = []
         for msg in self._chat_ctx.items:
+            if not hasattr(msg, "role"):
+                continue
             messages.append({"role": msg.role, "content": msg.text_content or ""})
 
         request_id = "fal-response"

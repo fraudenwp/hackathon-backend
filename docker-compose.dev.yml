@@ -29,7 +29,7 @@ x-common-volumes: &common-volumes
 
 x-worker-command: &worker-command |
   sh -c "
-    python -m debugpy --listen 0.0.0.0:6900 --wait-for-client -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --log-level=INFO
+    python -m debugpy --listen 0.0.0.0:6900 --wait-for-client -m taskiq worker --workers 1 src.tasks.taskiq_setup:broker -fsd --reload --log-level=DEBUG
   "
 services:
   web:

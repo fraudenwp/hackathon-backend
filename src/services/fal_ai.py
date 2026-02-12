@@ -1,58 +1,113 @@
 """
-Fal AI Service - Generic API wrapper for 3 endpoints from llms.txt
+Fal AI Service - Uses fal_client for TTS, httpx for STT/LLM
 """
 
+import asyncio
+import os
 from typing import Any, AsyncIterator, Dict, Optional
 
+import fal_client
 import httpx
+import requests
 
 from src.constants.env import FAL_API_KEY
 from src.utils.logger import get_logger, log_error
 
 logger = get_logger(__name__)
 
+# fal_client reads FAL_KEY from environment
+os.environ.setdefault("FAL_KEY", FAL_API_KEY)
+
+
+def _on_queue_update(update):
+    """Callback for fal_client queue updates."""
+    if isinstance(update, fal_client.InProgress):
+        for log in update.logs:
+            logger.debug(f"[TTS] {log['message']}")
+
 
 class FalAIService:
     """Generic service for Fal AI API endpoints"""
 
     BASE_URL = "https://fal.run"
-    STT_ENDPOINT = "freya-mypsdi253hbk/freya-stt/audio/transcriptions"
-    TTS_ENDPOINT = "freya-mypsdi253hbk/freya-tts/stream"
-    LLM_ENDPOINT = "openrouter/router/openai/v1/responses"
+    STT_ENDPOINT = "freya-mypsdi253hbk/freya-stt"
+    TTS_ENDPOINT = os.getenv("TTS_ENDPOINT", "freya-mypsdi253hbk/freya-tts")
+    LLM_ENDPOINT = "openrouter/router/openai/v1/chat/completions"
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or FAL_API_KEY
-        # Persistent client — reuses TCP connections (eliminates per-request TLS handshake)
+        self._auth_header = {"Authorization": f"Key {self.api_key}"}
+
+        # JSON client for LLM endpoints and audio download
         self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(30.0, connect=10.0),
+            timeout=httpx.Timeout(60.0, connect=10.0, read=60.0),
             headers={
-                "Authorization": f"Key {self.api_key}",
+                **self._auth_header,
                 "Content-Type": "application/json",
             },
             http2=True,
         )
 
+        # Separate client for downloading audio (no auth headers needed)
+        self._download_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(60.0, connect=10.0, read=60.0),
+            http2=True,
+        )
+
     async def aclose(self) -> None:
         await self._client.aclose()
+        await self._download_client.aclose()
 
-    async def transcribe_audio(self, **kwargs: Any) -> Dict[str, Any]:
-        """STT: https://fal.run/freya-mypsdi253hbk/freya-stt/audio/transcriptions"""
-        endpoint = f"{self.BASE_URL}/{self.STT_ENDPOINT}"
+    # ── STT ──────────────────────────────────────────────────────────
+
+    def _sync_transcribe(
+        self, endpoint: str, audio: bytes, model: str, **kwargs: Any
+    ) -> Dict[str, Any]:
+        """Synchronous STT call using requests (run in thread)"""
+        files = {"file": ("audio.wav", audio, "audio/wav")}
+        data = {"model": model, **kwargs}
+        resp = requests.post(
+            endpoint,
+            files=files,
+            data=data,
+            headers={"Authorization": f"Key {self.api_key}"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
+
+    async def transcribe_audio(
+        self, audio: bytes, model: str = "freya-stt-v1", language: str = "tr", **kwargs: Any
+    ) -> Dict[str, Any]:
+        """STT: POST to freya-stt/audio/transcriptions"""
+        endpoint = f"{self.BASE_URL}/{self.STT_ENDPOINT}/audio/transcriptions"
 
         try:
-            response = await self._client.post(endpoint, json=kwargs)
-            response.raise_for_status()
-            return response.json()
+            result = await asyncio.to_thread(
+                self._sync_transcribe, endpoint, audio, model, language=language, **kwargs
+            )
+            return result
 
-        except httpx.HTTPError as e:
+        except requests.HTTPError as e:
             log_error(
                 logger,
                 "STT failed",
                 e,
                 endpoint=endpoint,
                 status_code=getattr(e.response, "status_code", None),
+                audio_size=len(audio),
             )
             raise
+        except Exception as e:
+            log_error(
+                logger,
+                "STT failed",
+                e,
+                endpoint=endpoint,
+            )
+            raise
+
+    # ── TTS (fal_client.subscribe) ───────────────────────────────────
 
     async def synthesize_speech(
         self,
@@ -62,29 +117,41 @@ class FalAIService:
         speed: float = 1.0,
         **kwargs: Any,
     ) -> bytes:
-        """TTS: https://fal.run/freya-mypsdi253hbk/freya-tts/stream"""
-        endpoint = f"{self.BASE_URL}/{self.TTS_ENDPOINT}"
-
+        """TTS using fal_client.subscribe + download audio from CDN URL"""
         try:
-            payload = {
-                "input": input,
-                "voice": voice,
-                "response_format": response_format,
-                "speed": speed,
-                **kwargs,
-            }
+            # fal_client.subscribe is synchronous, run in thread
+            result = await asyncio.to_thread(
+                fal_client.subscribe,
+                self.TTS_ENDPOINT,
+                arguments={
+                    "input": input,
+                    "voice": voice,
+                    "response_format": response_format,
+                    "speed": speed,
+                    **kwargs,
+                },
+                path="/generate",
+                with_logs=True,
+                on_queue_update=_on_queue_update,
+            )
 
-            response = await self._client.post(endpoint, json=payload)
+            audio_url = result["audio"]["url"]
+            logger.info(
+                f"TTS generated: inference={result.get('inference_time_ms')}ms, "
+                f"duration={result.get('audio_duration_sec')}s"
+            )
+
+            # Download audio bytes from CDN
+            response = await self._download_client.get(audio_url, follow_redirects=True)
             response.raise_for_status()
             return response.content
 
-        except httpx.HTTPError as e:
+        except Exception as e:
             log_error(
                 logger,
                 "TTS failed",
                 e,
-                endpoint=endpoint,
-                status_code=getattr(e.response, "status_code", None),
+                endpoint=self.TTS_ENDPOINT,
             )
             raise
 
@@ -97,8 +164,8 @@ class FalAIService:
         chunk_size: int = 8192,
         **kwargs: Any,
     ) -> AsyncIterator[bytes]:
-        """TTS Streaming: https://fal.run/freya-mypsdi253hbk/freya-tts/stream"""
-        endpoint = f"{self.BASE_URL}/{self.TTS_ENDPOINT}"
+        """TTS Streaming: direct HTTP POST to /stream endpoint (low latency)"""
+        endpoint = f"{self.BASE_URL}/{self.TTS_ENDPOINT}/stream"
 
         try:
             payload = {
@@ -123,6 +190,8 @@ class FalAIService:
                 status_code=getattr(e.response, "status_code", None),
             )
             raise
+
+    # ── LLM ──────────────────────────────────────────────────────────
 
     async def generate_llm_response(
         self,

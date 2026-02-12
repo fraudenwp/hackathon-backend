@@ -37,3 +37,4 @@ livekit-agents
 livekit-plugins-openai
 livekit-plugins-silero
 httpx[http2]
+fal_client

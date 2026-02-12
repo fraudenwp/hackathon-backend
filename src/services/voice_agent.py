@@ -2,6 +2,7 @@
 Voice AI Agent - Using LiveKit Agents framework with FAL.AI
 """
 
+import asyncio
 from typing import Dict, Optional
 
 from livekit import rtc
@@ -38,6 +39,7 @@ class VoiceAgent:
         self.room: Optional[rtc.Room] = None
         self.session: Optional[AgentSession] = None
         self.is_running = False
+        self._disconnected_event: Optional[asyncio.Event] = None
 
     async def start(self) -> None:
         """Start the agent and join the room"""
@@ -54,6 +56,13 @@ class VoiceAgent:
 
             # Create room instance
             self.room = rtc.Room()
+            self._disconnected_event = asyncio.Event()
+
+            # Listen for disconnect to unblock wait
+            @self.room.on("disconnected")
+            def _on_disconnected(*args):
+                logger.info("Room disconnected", room=self.room_name)
+                self._disconnected_event.set()
 
             # Connect to room
             from src.constants.env import LIVEKIT_WS_URL
@@ -80,12 +89,20 @@ class VoiceAgent:
             log_error(logger, "Failed to start voice agent", e, room=self.room_name)
             raise
 
+    async def wait_until_done(self) -> None:
+        """Block until the room disconnects or agent is stopped"""
+        if self._disconnected_event:
+            await self._disconnected_event.wait()
+
     async def stop(self) -> None:
         """Stop the agent and leave the room"""
         try:
             logger.info("Stopping voice agent", room=self.room_name)
 
             self.is_running = False
+
+            if self._disconnected_event:
+                self._disconnected_event.set()
 
             if self.session:
                 await self.session.aclose()
