@@ -79,6 +79,9 @@ else:
         "DATABASE_URL", "postgresql+asyncpg://postgres:postgres@db:5436/resai"
     )
 FAL_API_KEY = os.getenv("FAL_API_KEY", "fal_api_key")
+
+# ChromaDB
+CHROMA_PERSIST_DIR = os.getenv("CHROMA_PERSIST_DIR", "/data/chromadb")
 SECRET_KEY = os.environ.get(
     "SECRET_KEY", "09d25e094faa6ca2556c818166b7a9563b93f7099f6f0f4caa6cf63b88e8d3e7"
 )

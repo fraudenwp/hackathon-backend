@@ -71,8 +71,12 @@ class LiveKitController:
             metadata={"user_id": str(current_user.id)},
         )
 
-        # Start AI agent in background using Taskiq
-        await start_voice_agent_task.kiq(room_name, system_prompt=request.system_prompt)
+        # Start AI agent in background using Taskiq (user_id for RAG)
+        await start_voice_agent_task.kiq(
+            room_name,
+            system_prompt=request.system_prompt,
+            user_id=str(current_user.id),
+        )
 
         return MakeCallResponse(
             token=token,

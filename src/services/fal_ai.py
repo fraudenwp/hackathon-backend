@@ -284,6 +284,50 @@ class FalAIService:
             )
             raise
 
+    async def generate_llm_response_stream_raw(
+        self,
+        messages: Optional[list] = None,
+        model: Optional[str] = None,
+        tools: Optional[list] = None,
+        tool_choice: Optional[str | Dict] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[Dict]:
+        """Streaming LLM — yields raw parsed SSE chunks (for tool call handling)."""
+        import json as _json
+
+        endpoint = f"{self.BASE_URL}/{self.LLM_ENDPOINT}"
+
+        payload: Dict[str, Any] = {"stream": True, **kwargs}
+        if messages is not None:
+            payload["messages"] = messages
+        if model is not None:
+            payload["model"] = model
+        if tools is not None:
+            payload["tools"] = tools
+        if tool_choice is not None:
+            payload["tool_choice"] = tool_choice
+
+        try:
+            async with self._client.stream("POST", endpoint, json=payload) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    yield _json.loads(data)
+
+        except httpx.HTTPError as e:
+            log_error(
+                logger,
+                "LLM stream (raw) failed",
+                e,
+                endpoint=endpoint,
+                status_code=getattr(e.response, "status_code", None),
+            )
+            raise
+
 
 # Singleton instance
 fal_ai_service = FalAIService()

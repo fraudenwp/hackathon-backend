@@ -1,8 +1,9 @@
-"""FAL.AI LLM Plugin for LiveKit Agents"""
+"""FAL.AI LLM Plugin for LiveKit Agents — with tool calling support"""
 
 from __future__ import annotations
 
-from typing import Any
+import json as _json
+from typing import Any, Optional
 
 from livekit.agents import llm
 from livekit.agents.llm import LLM, ChatContext, ChatChunk, ChoiceDelta, LLMStream, Tool
@@ -18,16 +19,22 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+MAX_TOOL_ROUNDS = 3
+
 
 class FalLLM(LLM):
     """FAL.AI LLM plugin for LiveKit Agents"""
 
     def __init__(
-        self, model: str = "meta-llama/llama-3.1-70b-instruct", temperature: float = 0.7
+        self,
+        model: str = "meta-llama/llama-3.1-70b-instruct",
+        temperature: float = 0.7,
+        user_id: Optional[str] = None,
     ):
         super().__init__()
         self._model = model
         self._temperature = temperature
+        self._user_id = user_id
 
     def chat(
         self,
@@ -46,11 +53,12 @@ class FalLLM(LLM):
             conn_options=conn_options,
             model=self._model,
             temperature=self._temperature,
+            user_id=self._user_id,
         )
 
 
 class FalLLMStream(LLMStream):
-    """Stream wrapper for FAL.AI responses"""
+    """Stream wrapper for FAL.AI responses with tool calling"""
 
     def __init__(
         self,
@@ -61,33 +69,161 @@ class FalLLMStream(LLMStream):
         conn_options: APIConnectOptions,
         model: str,
         temperature: float,
+        user_id: Optional[str] = None,
     ) -> None:
         super().__init__(
             llm=llm, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options
         )
         self._model = model
         self._temperature = temperature
+        self._user_id = user_id
+
+    def _inject_rag_context(self, messages: list[dict]) -> list[dict]:
+        """Search user's documents and inject relevant context into messages"""
+        if not self._user_id:
+            return messages
+
+        try:
+            from src.services.rag_service import rag_service
+
+            if not rag_service.has_documents(self._user_id):
+                return messages
+
+            # Get the last user message as query
+            user_query = ""
+            for msg in reversed(messages):
+                if msg["role"] == "user" and msg["content"]:
+                    user_query = msg["content"]
+                    break
+
+            if not user_query:
+                return messages
+
+            results = rag_service.search(self._user_id, user_query, k=3)
+            if not results:
+                return messages
+
+            context_str = "\n---\n".join(r["text"] for r in results)
+
+            rag_msg = {
+                "role": "system",
+                "content": (
+                    f"Kullanicinin yukledigi dokumanlardan ilgili bolumler:\n\n{context_str}\n\n"
+                    "Bu bilgileri kullanarak soruyu yanitla. "
+                    "Eger bilgi dokumanlarda yoksa bunu belirt."
+                ),
+            }
+
+            for i, msg in enumerate(messages):
+                if msg["role"] == "system":
+                    messages.insert(i + 1, rag_msg)
+                    return messages
+
+            messages.insert(0, rag_msg)
+            return messages
+
+        except Exception as e:
+            logger.warning("RAG context injection failed", error=str(e))
+            return messages
 
     async def _run(self) -> None:
-        """Stream tokens from FAL.AI to minimize time-to-first-byte."""
+        """Stream tokens with tool call support."""
+        from src.services.tools import tool_registry
+
         messages = []
         for msg in self._chat_ctx.items:
             if not hasattr(msg, "role"):
                 continue
             messages.append({"role": msg.role, "content": msg.text_content or ""})
 
+        # Inject RAG context
+        messages = self._inject_rag_context(messages)
+
+        # Get tool definitions
+        tool_defs = tool_registry.to_openai_functions() or None
+
         request_id = "fal-response"
 
-        # Stream token by token — each delta goes to TTS immediately
-        async for token in fal_ai_service.generate_llm_response_stream(
-            messages=messages,
-            model=self._model,
-            temperature=self._temperature,
-            max_tokens=150,
-        ):
-            self._event_ch.send_nowait(
-                ChatChunk(
-                    id=request_id,
-                    delta=ChoiceDelta(role="assistant", content=token),
-                )
-            )
+        for _round in range(MAX_TOOL_ROUNDS):
+            # Accumulate tool_calls from streamed chunks
+            tool_calls_acc: dict[int, dict] = {}  # index -> {id, name, arguments}
+            has_content = False
+
+            async for chunk in fal_ai_service.generate_llm_response_stream_raw(
+                messages=messages,
+                model=self._model,
+                temperature=self._temperature,
+                max_tokens=150,
+                tools=tool_defs,
+            ):
+                delta = chunk.get("choices", [{}])[0].get("delta", {})
+
+                # Stream content tokens to TTS
+                if delta.get("content"):
+                    has_content = True
+                    self._event_ch.send_nowait(
+                        ChatChunk(
+                            id=request_id,
+                            delta=ChoiceDelta(role="assistant", content=delta["content"]),
+                        )
+                    )
+
+                # Accumulate tool call chunks
+                if delta.get("tool_calls"):
+                    for tc in delta["tool_calls"]:
+                        idx = tc["index"]
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {
+                                "id": tc.get("id", ""),
+                                "name": tc.get("function", {}).get("name", ""),
+                                "arguments": "",
+                            }
+                        if tc.get("id"):
+                            tool_calls_acc[idx]["id"] = tc["id"]
+                        if tc.get("function", {}).get("name"):
+                            tool_calls_acc[idx]["name"] = tc["function"]["name"]
+                        if tc.get("function", {}).get("arguments"):
+                            tool_calls_acc[idx]["arguments"] += tc["function"]["arguments"]
+
+            # If no tool calls, we're done
+            if not tool_calls_acc:
+                break
+
+            # Execute tool calls
+            logger.info("Executing tool calls", count=len(tool_calls_acc))
+
+            # Add assistant message with tool_calls to messages
+            assistant_msg = {"role": "assistant", "content": None, "tool_calls": []}
+            for idx in sorted(tool_calls_acc.keys()):
+                tc = tool_calls_acc[idx]
+                assistant_msg["tool_calls"].append({
+                    "id": tc["id"],
+                    "type": "function",
+                    "function": {"name": tc["name"], "arguments": tc["arguments"]},
+                })
+            messages.append(assistant_msg)
+
+            # Execute each tool and add results
+            for idx in sorted(tool_calls_acc.keys()):
+                tc = tool_calls_acc[idx]
+                try:
+                    args = _json.loads(tc["arguments"]) if tc["arguments"] else {}
+                except _json.JSONDecodeError:
+                    args = {}
+
+                # Inject user_id for tools that need it
+                if self._user_id:
+                    args["user_id"] = self._user_id
+
+                result = await tool_registry.execute(tc["name"], **args)
+                logger.info("Tool executed", tool=tc["name"], result_len=len(result))
+
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": result,
+                })
+
+            # Continue loop — next iteration will stream with tool results
+            # Disable tools for the follow-up to get a text response
+            tool_defs = None

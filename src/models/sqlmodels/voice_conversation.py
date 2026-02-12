@@ -6,7 +6,7 @@ import uuid
 
 
 class VoiceConversation(SQLModel, table=True):
-    __tablename__ = "voice_conversations"
+    __tablename__ = "voice_conversation"
 
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()), primary_key=True, index=True
@@ -34,10 +34,10 @@ class VoiceConversation(SQLModel, table=True):
 
 
 class VoiceMessage(SQLModel, table=True):
-    __tablename__ = "voice_messages"
+    __tablename__ = "voice_message"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    conversation_id: str = Field(foreign_key="voice_conversations.id", index=True)
+    conversation_id: str = Field(foreign_key="voice_conversation.id", index=True)
 
     participant_identity: str = Field(index=True)
     participant_name: str = Field(...)

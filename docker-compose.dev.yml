@@ -26,6 +26,7 @@ x-worker-env: &worker-env
 
 x-common-volumes: &common-volumes
   - .:/usr/src/app
+  - chromadb_data:/data/chromadb
 
 x-worker-command: &worker-command |
   sh -c "
@@ -145,3 +146,5 @@ services:
 volumes:
   postgres_data:
     name: resai_postgres_data
+  chromadb_data:
+    name: resai_chromadb_data

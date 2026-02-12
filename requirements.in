@@ -38,3 +38,8 @@ livekit-plugins-openai
 livekit-plugins-silero
 httpx[http2]
 fal_client
+chromadb
+langchain
+langchain-community
+python-docx
+langchain-text-splitters

@@ -11,11 +11,15 @@ from src.utils.logger import logger
 
 
 @broker.task
-async def start_voice_agent_task(room_name: str, system_prompt: Optional[str] = None):
+async def start_voice_agent_task(
+    room_name: str,
+    system_prompt: Optional[str] = None,
+    user_id: Optional[str] = None,
+):
     """Start voice agent in background and keep it alive until disconnect"""
     logger.info(f"Starting voice agent for room: {room_name}")
     try:
-        agent = await _start_agent(room_name, system_prompt=system_prompt)
+        agent = await _start_agent(room_name, system_prompt=system_prompt, user_id=user_id)
         logger.info(f"Voice agent started successfully for room: {room_name}")
 
         # Block until room disconnects or agent is stopped
