@@ -13,6 +13,7 @@ from livekit.plugins import openai as lk_openai
 from livekit.plugins.silero import VAD
 
 from src.constants.env import FAL_API_KEY, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_WS_URL
+from src.services.latency_tracker import latency_tracker
 from src.services.plugins import FalLLM
 from src.utils.logger import get_logger, log_error
 
@@ -61,11 +62,23 @@ Araçları SADECE aşağıdaki koşullarda çağır, başka hiçbir durumda ça�
    - Kullanıcının sorusu, yüklü dokümanların kapsamına girebilecek bir konudaysa — kullanıcı "dokümana bak" dememiş olsa bile. Örneğin dokümanlar arasında Türk Ceza Kanunu varsa ve kullanıcı "hırsızlığın cezası ne?" diye sorarsa, önce search_documents çağır.
    - Kural: Şüphen varsa dokümanları ARA. Dokümanda yoksa kendi bilginle tamamla. Aramadan cevap verip yanlış bilgi vermek, gereksiz bir arama yapmaktan daha kötüdür.
 
-3. **web_search** → Kullanıcı açıkça güncel bilgi, haber, istatistik veya internetten doğrulama istediğinde.
+3. **web_search** → Aşağıdakilerden BİRİ geçerliyse çağır:
+   - Kullanıcının sorduğu sorunun cevabını kesin bilmiyorsan veya güncel bilgi gerekiyorsa. Kullanıcının "internetten ara" demesini BEKLEME — emin olmadığın her konuda proaktif olarak web_search çağır.
+   - Dokümanlarda bulunamayan bilgi sorulduğunda otomatik olarak web'e geç.
+   - Kural: Yanlış veya eksik bilgi vermektense, web'den aramak her zaman daha iyidir.
+
+4. **news_search** → Aşağıdakilerden BİRİ geçerliyse çağır:
+   - Kullanıcı güncel haberler, son dakika gelişmeleri veya son olaylar hakkında sorduğunda.
+   - "Son haberler", "gündem", "ne oldu" gibi ifadeler geçtiğinde.
+   - Genel bilgi için web_search, haberler için news_search kullan.
+
+5. **wikipedia_search** → Aşağıdakilerden BİRİ geçerliyse çağır:
+   - Tarih, bilim, coğrafya, biyografi gibi ansiklopedik konularda bilgi istendiğinde.
+   - "Kim?", "Ne?", "Nerede?" gibi genel kültür soruları sorulduğunda.
+   - Güvenilir, yapılandırılmış bilgi gerektiğinde web_search yerine wikipedia_search tercih et.
 
 ## ARAÇ KULLANMA (direkt cevapla):
 - Selamlaşma, sohbet, teşekkür → Direkt cevapla, kısa tut.
-- Genel kültür, tanım, kavram açıklaması ve yüklü dokümanlarla alakasız konular → Kendi bilginle cevapla.
 - Belirsiz sorgular → Araç çağırmak yerine kullanıcıya ne istediğini sor.
 
 ## CEVAP FORMATI
@@ -73,6 +86,11 @@ Araçları SADECE aşağıdaki koşullarda çağır, başka hiçbir durumda ça�
 - Madde işareti yerine akıcı paragraflar tercih et, ancak karşılaştırma/liste istenirse kullan.
 - Kaynak belirtirken kısa referans ver, uzun URL yapıştırma.
 - Doküman sonucu kullandıysan cevabın sonunda hangi dokümandan geldiğini kısaca belirt.
+
+## ARAÇ SONUÇLARINI KULLANMA (KRİTİK)
+- Araç sonucu döndüyse, ASLA "bulamadım" veya "ulaşamadım" deme.
+- Dönen sonuçları doğrudan özetle ve kullanıcıya sun. Sonuç tam olarak istenen formatta olmasa bile (örneğin "haber" yerine genel bilgi geldiyse), elindeki bilgiyi paylaş.
+- Sadece araç gerçekten boş sonuç döndürdüyse ("No results found") bulamadığını söyle.
 
 ## LATENCY OPTİMİZASYONU
 - Tek araç çağrısı yetiyorsa birden fazla çağırma.
@@ -174,17 +192,33 @@ class VoiceAgent:
                     voice="alloy",
                 ),
                 vad=VAD.load(
-                    min_speech_duration=0.05,
-                    min_silence_duration=0.8,
-                    prefix_padding_duration=0.5,
-                    activation_threshold=0.35,
+                    min_speech_duration=0.1,
+                    min_silence_duration=0.4,
+                    prefix_padding_duration=0.3,
+                    activation_threshold=0.45,
                 ),
+                # Echo/feedback loop prevention — allow interruptions but
+                # require real speech (not just echo picked up by mic)
+                allow_interruptions=True,
+                min_interruption_duration=0.5,
+                min_interruption_words=1,
+                false_interruption_timeout=1.0,
+                resume_false_interruption=True,
             )
 
             # Start session with custom assistant
             await self.session.start(
                 room=self.room, agent=FalAssistant(system_prompt=self.system_prompt)
             )
+
+            # -- Latency tracking events --
+            @self.session.on("user_speech_committed")
+            def _on_user_speech_committed(*args):
+                latency_tracker.on_user_speech_end(self.room_name)
+
+            @self.session.on("agent_started_speaking")
+            def _on_agent_started_speaking(*args):
+                latency_tracker.on_agent_speech_start(self.room_name)
 
             self.is_running = True
             logger.info("Voice agent started successfully", room=self.room_name)

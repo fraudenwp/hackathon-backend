@@ -1,5 +1,6 @@
 from sqlmodel.ext.asyncio.session import AsyncSession
 from sqlmodel import select
+from sqlalchemy import func
 from typing import List, Optional
 from datetime import datetime
 import uuid
@@ -39,14 +40,24 @@ async def list_user_conversations(
 
 
 async def list_agent_conversations(
-    db: AsyncSession, agent_id: str
-) -> List[VoiceConversation]:
+    db: AsyncSession, agent_id: str,
+    skip: int = 0, limit: int = 10,
+) -> tuple[List[VoiceConversation], int]:
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(VoiceConversation)
+        .where(VoiceConversation.agent_id == agent_id)
+    )
+    total = count_result.scalar_one()
+
     result = await db.execute(
         select(VoiceConversation)
         .where(VoiceConversation.agent_id == agent_id)
         .order_by(VoiceConversation.created_at.desc())
+        .offset(skip)
+        .limit(limit)
     )
-    return result.scalars().all()
+    return result.scalars().all(), total
 
 
 async def create_message(
@@ -89,6 +100,9 @@ async def end_conversation(
     conversation = result.scalar_one()
     conversation.status = "ended"
     conversation.ended_at = datetime.utcnow()
+    if conversation.started_at:
+        duration = (conversation.ended_at - conversation.started_at).total_seconds()
+        conversation.total_duration_seconds = int(duration)
     await db.commit()
     await db.refresh(conversation)
     return conversation

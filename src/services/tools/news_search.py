@@ -1,4 +1,4 @@
-"""Web Search Tool for LLM agent — using duckduckgo-search"""
+"""News Search Tool for LLM agent — using duckduckgo-search news API"""
 
 import asyncio
 from typing import Any
@@ -9,13 +9,13 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def _search_sync(query: str) -> str:
-    """Run DuckDuckGo search synchronously (called via asyncio.to_thread)"""
+def _news_search_sync(query: str) -> str:
+    """Run DuckDuckGo news search synchronously (called via asyncio.to_thread)"""
     from duckduckgo_search import DDGS
 
     with DDGS() as ddgs:
         results = []
-        for r in ddgs.text(
+        for r in ddgs.news(
             query,
             region="tr-tr",
             safesearch="moderate",
@@ -24,27 +24,29 @@ def _search_sync(query: str) -> str:
         ):
             title = r.get("title", "")
             body = r.get("body", "")
-            href = r.get("href", "")
-            results.append(f"{title}\n{body}\nURL: {href}")
+            source = r.get("source", "")
+            date = r.get("date", "")
+            url = r.get("url", "")
+            results.append(f"{title}\n{body}\nKaynak: {source} — {date}\nURL: {url}")
 
         if results:
             return "\n\n---\n\n".join(results)
-        return f"No results found for: {query}"
+        return f"No news found for: {query}"
 
 
-class GoogleSearchTool(BaseTool):
-    """Web search using DuckDuckGo"""
+class NewsSearchTool(BaseTool):
+    """News search using DuckDuckGo News"""
 
     @property
     def name(self) -> str:
-        return "web_search"
+        return "news_search"
 
     @property
     def description(self) -> str:
         return (
-            "Search the web for current information. "
-            "Use when the user asks about recent events, news, "
-            "or information you don't know. "
+            "Search for recent news articles and headlines. "
+            "Use when the user asks about current events, breaking news, "
+            "or recent developments. Returns news with source and date. "
             "Write the query in the same language as the user's question."
         )
 
@@ -55,7 +57,7 @@ class GoogleSearchTool(BaseTool):
             "properties": {
                 "query": {
                     "type": "string",
-                    "description": "The search query (use the same language as the user)",
+                    "description": "The news search query (use the same language as the user)",
                 },
             },
             "required": ["query"],
@@ -67,7 +69,7 @@ class GoogleSearchTool(BaseTool):
             return "No search query provided"
 
         try:
-            return await asyncio.to_thread(_search_sync, query)
+            return await asyncio.to_thread(_news_search_sync, query)
         except Exception as e:
-            logger.warning("Web search failed", query=query, error=str(e))
-            return f"Search failed: {str(e)}"
+            logger.warning("News search failed", query=query, error=str(e))
+            return f"News search failed: {str(e)}"

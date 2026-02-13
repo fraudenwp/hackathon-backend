@@ -10,7 +10,7 @@ class Document(SQLModel, table=True):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()), primary_key=True, index=True
     )
-    user_id: str = Field(foreign_key="user.id", index=True)
+    user_id: str = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
     filename: str = Field(...)
     r2_key: str = Field(...)
     content_type: str = Field(default="application/octet-stream")

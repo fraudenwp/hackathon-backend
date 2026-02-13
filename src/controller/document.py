@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Security, UploadFile, File
+from fastapi.responses import Response
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette import status
 
@@ -50,12 +51,14 @@ class DocumentController:
         r2_key = f"documents/{current_user.id}/{file.filename}"
 
         # Upload to R2
+        await file.seek(0)
+        content = await file.read()
         async with S3ClientWrapper() as s3:
-            await s3.upload_fileobj(
-                fileobj=file.file,
+            await s3.put_object(
                 bucket=R2_BUCKET_NAME,
                 key=r2_key,
-                extra_args={"ContentType": file.content_type},
+                body=content,
+                content_type=file.content_type,
             )
 
         # Save to DB
@@ -102,6 +105,45 @@ class DocumentController:
                 )
                 for d in docs
             ]
+        )
+
+    @router.get("/{doc_id}/view")
+    async def view_document(
+        doc_id: str,
+        current_user: Annotated[
+            User, Security(AuthCRUD.get_current_user_with_access())
+        ],
+        db: AsyncSession = Depends(get_session),
+    ):
+        """Dokümanı görüntülemek için içerik döndür (text) veya stream et (PDF)"""
+        doc = await get_document(db, doc_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="Doküman bulunamadı")
+
+        if doc.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Yetkisiz işlem")
+
+        logger.info("Viewing document", doc_id=doc_id, r2_key=doc.r2_key, bucket=R2_BUCKET_NAME, content_type=doc.content_type)
+
+        # Text dosyaları için içeriği JSON olarak döndür
+        if doc.content_type == "text/plain":
+            async with S3ClientWrapper() as s3:
+                obj = await s3.get_object(bucket=R2_BUCKET_NAME, key=doc.r2_key)
+                body = await obj["Body"].read()
+                text_content = body.decode("utf-8")
+            return {"type": "text", "content": text_content, "filename": doc.filename}
+
+        # PDF ve diğer dosyalar için dosyayı R2'den çekip döndür
+        async with S3ClientWrapper() as s3:
+            obj = await s3.get_object(bucket=R2_BUCKET_NAME, key=doc.r2_key)
+            body = await obj["Body"].read()
+
+        return Response(
+            content=body,
+            media_type=doc.content_type,
+            headers={
+                "Content-Disposition": f'inline; filename="{doc.filename}"',
+            },
         )
 
     @router.delete("/{doc_id}")

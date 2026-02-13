@@ -63,6 +63,23 @@ class S3ClientWrapper:
                 detail="Error uploading file to S3",
             )
 
+    async def put_object(
+        self, bucket: str, key: str, body: bytes, content_type: str = "application/octet-stream"
+    ) -> None:
+        try:
+            await self.s3_client.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=body,
+                ContentType=content_type,
+            )
+        except Exception as e:
+            logger.error(f"Error putting object to S3: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Error uploading file to S3",
+            )
+
     async def generate_presigned_url(
         self, client_method, params, expires_in
     ) -> Optional[str]:

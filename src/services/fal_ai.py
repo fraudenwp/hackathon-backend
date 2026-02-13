@@ -21,7 +21,7 @@ class FalAIService:
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or FAL_API_KEY
         self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(60.0, connect=10.0, read=60.0),
+            timeout=httpx.Timeout(30.0, connect=3.0, read=30.0),
             headers={
                 "Authorization": f"Key {self.api_key}",
                 "Content-Type": "application/json",

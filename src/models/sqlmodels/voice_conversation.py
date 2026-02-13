@@ -11,8 +11,8 @@ class VoiceConversation(SQLModel, table=True):
     id: str = Field(
         default_factory=lambda: str(uuid.uuid4()), primary_key=True, index=True
     )
-    user_id: str = Field(foreign_key="user.id", index=True)
-    agent_id: Optional[str] = Field(default=None, foreign_key="agent.id", index=True)
+    user_id: str = Field(foreign_key="user.id", ondelete="CASCADE", index=True)
+    agent_id: Optional[str] = Field(default=None, foreign_key="agent.id", ondelete="SET NULL", index=True)
     room_name: str = Field(index=True, unique=True)
     room_sid: Optional[str] = None
 
@@ -38,7 +38,7 @@ class VoiceMessage(SQLModel, table=True):
     __tablename__ = "voice_message"
 
     id: str = Field(default_factory=lambda: str(uuid.uuid4()), primary_key=True)
-    conversation_id: str = Field(foreign_key="voice_conversation.id", index=True)
+    conversation_id: str = Field(foreign_key="voice_conversation.id", ondelete="CASCADE", index=True)
 
     participant_identity: str = Field(index=True)
     participant_name: str = Field(...)

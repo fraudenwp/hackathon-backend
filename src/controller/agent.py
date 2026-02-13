@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Security
+from fastapi import APIRouter, Depends, HTTPException, Query, Security
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.crud.auth import AuthCRUD
@@ -253,19 +253,24 @@ class AgentController:
             User, Security(AuthCRUD.get_current_user_with_access())
         ],
         db: AsyncSession = Depends(get_session),
-    ) -> list[dict]:
-        """Get conversations for an agent"""
+        page: int = Query(1, ge=1),
+        page_size: int = Query(10, ge=1, le=50),
+    ) -> dict:
+        """Get paginated conversations for an agent"""
         agent = await agent_crud.get_agent(db, agent_id)
         if not agent:
             raise HTTPException(status_code=404, detail="Agent bulunamadi")
         if agent.user_id != current_user.id:
             raise HTTPException(status_code=403, detail="Yetkisiz islem")
 
-        conversations = await conv_crud.list_agent_conversations(db, agent_id)
-        result = []
+        skip = (page - 1) * page_size
+        conversations, total = await conv_crud.list_agent_conversations(
+            db, agent_id, skip=skip, limit=page_size
+        )
+        items = []
         for conv in conversations:
             messages = await conv_crud.list_conversation_messages(db, conv.id)
-            result.append({
+            items.append({
                 "id": conv.id,
                 "room_name": conv.room_name,
                 "status": conv.status,
@@ -282,4 +287,10 @@ class AgentController:
                     for m in messages
                 ],
             })
-        return result
+        return {
+            "conversations": items,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
+        }

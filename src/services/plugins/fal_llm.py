@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json as _json
+import re
 from typing import Any, Callable, Optional
 
 from livekit.agents import llm
@@ -19,13 +21,18 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-MAX_TOOL_ROUNDS = 3
+MAX_TOOL_ROUNDS = 2
+
+# Regex to strip markdown artifacts that TTS would read aloud
+_MD_STRIP = re.compile(r"\*{1,2}|#{1,6}\s?|`{1,3}|^-\s|^\d+\.\s", re.MULTILINE)
 
 # Tool name → human-readable status (for frontend indicator)
 TOOL_STATUS_MAP: dict[str, str] = {
     "web_search": "Searching the web...",
     "search_documents": "Searching documents...",
     "list_documents": "Listing documents...",
+    "news_search": "Searching news...",
+    "wikipedia_search": "Searching Wikipedia...",
 }
 
 # Tool name → spoken filler (what the agent SAYS via TTS before running the tool)
@@ -33,6 +40,8 @@ TOOL_FILLER_MAP: dict[str, str] = {
     "web_search": "Bir saniye, internetten araştırıyorum.",
     "search_documents": "Dökümanlarınızı kontrol ediyorum.",
     "list_documents": "Dökümanlarınıza bakıyorum.",
+    "news_search": "Haberlere bakıyorum.",
+    "wikipedia_search": "Wikipedia'ya bakıyorum.",
 }
 
 
@@ -197,49 +206,59 @@ class FalLLMStream(LLMStream):
                 continue
             messages.append({"role": msg.role, "content": msg.text_content or ""})
 
-        # Save user's last message
+        # Save user's last message (fire-and-forget — don't block LLM)
         user_text = ""
         for msg in reversed(messages):
             if msg["role"] == "user" and msg["content"]:
                 user_text = msg["content"]
                 break
         if user_text:
-            await self._save_message("user", user_text)
+            asyncio.create_task(self._save_message("user", user_text))
 
-        # Inject RAG context
+        # Inject RAG context (skip for very short messages like greetings)
         self._publish_status("Thinking...")
-        messages = self._inject_rag_context(messages)
+        if len(user_text.split()) >= 3:
+            messages = self._inject_rag_context(messages)
 
         # Get tool definitions
         tool_defs = tool_registry.to_openai_functions() or None
 
         request_id = "fal-response"
         full_response = ""  # Accumulate full AI response for saving
+        used_tools = False
 
         for _round in range(MAX_TOOL_ROUNDS):
             # Accumulate tool_calls from streamed chunks
             tool_calls_acc: dict[int, dict] = {}  # index -> {id, name, arguments}
-            self._publish_status("Generating response...")
+            if used_tools:
+                self._publish_status("Analyzing results...")
+            else:
+                self._publish_status("Thinking...")
+
+            # Normal: voice response. After tools: needs room to synthesize results.
+            tokens = 4096 if used_tools else 1024
 
             async for chunk in fal_ai_service.generate_llm_response_stream_raw(
                 messages=messages,
                 model=self._model,
                 temperature=self._temperature,
-                max_tokens=150,
+                max_tokens=tokens,
                 tools=tool_defs,
                 tool_choice="auto" if tool_defs else None,
             ):
                 delta = chunk.get("choices", [{}])[0].get("delta", {})
 
-                # Stream content tokens to TTS
+                # Stream content tokens to TTS (strip markdown so TTS doesn't read ** etc.)
                 if delta.get("content"):
                     full_response += delta["content"]
-                    self._event_ch.send_nowait(
-                        ChatChunk(
-                            id=request_id,
-                            delta=ChoiceDelta(role="assistant", content=delta["content"]),
+                    clean = _MD_STRIP.sub("", delta["content"])
+                    if clean:
+                        self._event_ch.send_nowait(
+                            ChatChunk(
+                                id=request_id,
+                                delta=ChoiceDelta(role="assistant", content=clean),
+                            )
                         )
-                    )
 
                 # Accumulate tool call chunks
                 if delta.get("tool_calls"):
@@ -263,6 +282,7 @@ class FalLLMStream(LLMStream):
                 break
 
             # Execute tool calls
+            used_tools = True
             logger.info("Executing tool calls", count=len(tool_calls_acc))
 
             # Speak a filler phrase so the user knows what's happening
@@ -306,7 +326,12 @@ class FalLLMStream(LLMStream):
                 self._publish_status(status_msg)
 
                 result = await tool_registry.execute(tc["name"], **args)
-                logger.info("Tool executed", tool=tc["name"], result_len=len(result))
+                logger.info(
+                    "Tool executed",
+                    tool=tc["name"],
+                    result_len=len(result),
+                    result_preview=result[:300],
+                )
 
                 messages.append({
                     "role": "tool",
@@ -315,7 +340,7 @@ class FalLLMStream(LLMStream):
                 })
 
             # Continue loop — next iteration will stream with tool results
-            self._publish_status("Generating response...")
+            self._publish_status("Preparing answer...")
             # Disable tools for the follow-up to get a text response
             tool_defs = None
 
