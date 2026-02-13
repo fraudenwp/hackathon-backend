@@ -1,8 +1,7 @@
-"""Google Search Tool for LLM agent"""
+"""Web Search Tool for LLM agent — using duckduckgo-search"""
 
+import asyncio
 from typing import Any
-
-import httpx
 
 from src.services.tools.base import BaseTool
 from src.utils.logger import get_logger
@@ -10,8 +9,25 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _search_sync(query: str) -> str:
+    """Run DuckDuckGo search synchronously (called via asyncio.to_thread)"""
+    from duckduckgo_search import DDGS
+
+    with DDGS() as ddgs:
+        results = []
+        for r in ddgs.text(query, max_results=5):
+            title = r.get("title", "")
+            body = r.get("body", "")
+            href = r.get("href", "")
+            results.append(f"**{title}**\n{body}\n{href}")
+
+        if results:
+            return "\n\n".join(results)
+        return f"No results found for: {query}"
+
+
 class GoogleSearchTool(BaseTool):
-    """Web search using Google Custom Search API (or fallback to DuckDuckGo)"""
+    """Web search using DuckDuckGo"""
 
     @property
     def name(self) -> str:
@@ -19,7 +35,11 @@ class GoogleSearchTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Search the web for current information. Use when the user asks about recent events, facts, or anything not in their documents."
+        return (
+            "Search the web for current information. "
+            "Use ONLY when the user explicitly asks about recent events, news, "
+            "or information you don't know."
+        )
 
     @property
     def parameters(self) -> dict:
@@ -40,29 +60,7 @@ class GoogleSearchTool(BaseTool):
             return "No search query provided"
 
         try:
-            # DuckDuckGo instant answer API (no API key needed)
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(
-                    "https://api.duckduckgo.com/",
-                    params={"q": query, "format": "json", "no_html": 1},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-
-            # Extract useful info
-            results = []
-            if data.get("AbstractText"):
-                results.append(data["AbstractText"])
-            if data.get("Answer"):
-                results.append(data["Answer"])
-            for topic in data.get("RelatedTopics", [])[:3]:
-                if isinstance(topic, dict) and topic.get("Text"):
-                    results.append(topic["Text"])
-
-            if results:
-                return "\n\n".join(results)
-            return f"No results found for: {query}"
-
+            return await asyncio.to_thread(_search_sync, query)
         except Exception as e:
             logger.warning("Web search failed", query=query, error=str(e))
             return f"Search failed: {str(e)}"

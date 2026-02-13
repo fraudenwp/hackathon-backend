@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json as _json
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from livekit.agents import llm
 from livekit.agents.llm import LLM, ChatContext, ChatChunk, ChoiceDelta, LLMStream, Tool
@@ -21,6 +21,20 @@ logger = get_logger(__name__)
 
 MAX_TOOL_ROUNDS = 3
 
+# Tool name → human-readable status (for frontend indicator)
+TOOL_STATUS_MAP: dict[str, str] = {
+    "web_search": "Searching the web...",
+    "search_documents": "Searching documents...",
+    "list_documents": "Listing documents...",
+}
+
+# Tool name → spoken filler (what the agent SAYS via TTS before running the tool)
+TOOL_FILLER_MAP: dict[str, str] = {
+    "web_search": "Bir saniye, internetten araştırıyorum.",
+    "search_documents": "Dökümanlarınızı kontrol ediyorum.",
+    "list_documents": "Dökümanlarınıza bakıyorum.",
+}
+
 
 class FalLLM(LLM):
     """FAL.AI LLM plugin for LiveKit Agents"""
@@ -30,11 +44,13 @@ class FalLLM(LLM):
         model: str = "meta-llama/llama-3.1-70b-instruct",
         temperature: float = 0.7,
         user_id: Optional[str] = None,
+        on_status: Optional[Callable[[str], Any]] = None,
     ):
         super().__init__()
         self._model = model
         self._temperature = temperature
         self._user_id = user_id
+        self._on_status = on_status
 
     def chat(
         self,
@@ -54,6 +70,7 @@ class FalLLM(LLM):
             model=self._model,
             temperature=self._temperature,
             user_id=self._user_id,
+            on_status=self._on_status,
         )
 
 
@@ -70,6 +87,7 @@ class FalLLMStream(LLMStream):
         model: str,
         temperature: float,
         user_id: Optional[str] = None,
+        on_status: Optional[Callable[[str], Any]] = None,
     ) -> None:
         super().__init__(
             llm=llm, chat_ctx=chat_ctx, tools=tools, conn_options=conn_options
@@ -77,6 +95,15 @@ class FalLLMStream(LLMStream):
         self._model = model
         self._temperature = temperature
         self._user_id = user_id
+        self._on_status = on_status
+
+    def _publish_status(self, status: str) -> None:
+        """Send status update to frontend via callback"""
+        if self._on_status:
+            try:
+                self._on_status(status)
+            except Exception:
+                pass
 
     def _inject_rag_context(self, messages: list[dict]) -> list[dict]:
         """Search user's documents and inject relevant context into messages"""
@@ -99,6 +126,7 @@ class FalLLMStream(LLMStream):
             if not user_query:
                 return messages
 
+            self._publish_status("Searching documents...")
             results = rag_service.search(self._user_id, user_query, k=3)
             if not results:
                 return messages
@@ -137,6 +165,7 @@ class FalLLMStream(LLMStream):
             messages.append({"role": msg.role, "content": msg.text_content or ""})
 
         # Inject RAG context
+        self._publish_status("Thinking...")
         messages = self._inject_rag_context(messages)
 
         # Get tool definitions
@@ -148,6 +177,7 @@ class FalLLMStream(LLMStream):
             # Accumulate tool_calls from streamed chunks
             tool_calls_acc: dict[int, dict] = {}  # index -> {id, name, arguments}
             has_content = False
+            self._publish_status("Generating response...")
 
             async for chunk in fal_ai_service.generate_llm_response_stream_raw(
                 messages=messages,
@@ -155,11 +185,14 @@ class FalLLMStream(LLMStream):
                 temperature=self._temperature,
                 max_tokens=150,
                 tools=tool_defs,
+                tool_choice="auto" if tool_defs else None,
             ):
                 delta = chunk.get("choices", [{}])[0].get("delta", {})
 
                 # Stream content tokens to TTS
                 if delta.get("content"):
+                    if not has_content:
+                        self._publish_status("Speaking...")
                     has_content = True
                     self._event_ch.send_nowait(
                         ChatChunk(
@@ -192,6 +225,18 @@ class FalLLMStream(LLMStream):
             # Execute tool calls
             logger.info("Executing tool calls", count=len(tool_calls_acc))
 
+            # Speak a filler phrase so the user knows what's happening
+            tool_names = [tool_calls_acc[i]["name"] for i in sorted(tool_calls_acc.keys())]
+            filler = TOOL_FILLER_MAP.get(tool_names[0], "Bir saniye bakayım.")
+            self._event_ch.send_nowait(
+                ChatChunk(
+                    id=request_id,
+                    delta=ChoiceDelta(role="assistant", content=filler),
+                )
+            )
+
+            self._publish_status("Calling tools...")
+
             # Add assistant message with tool_calls to messages
             assistant_msg = {"role": "assistant", "content": None, "tool_calls": []}
             for idx in sorted(tool_calls_acc.keys()):
@@ -215,6 +260,9 @@ class FalLLMStream(LLMStream):
                 if self._user_id:
                     args["user_id"] = self._user_id
 
+                status_msg = TOOL_STATUS_MAP.get(tc["name"], f"Running {tc['name']}...")
+                self._publish_status(status_msg)
+
                 result = await tool_registry.execute(tc["name"], **args)
                 logger.info("Tool executed", tool=tc["name"], result_len=len(result))
 
@@ -225,5 +273,9 @@ class FalLLMStream(LLMStream):
                 })
 
             # Continue loop — next iteration will stream with tool results
+            self._publish_status("Generating response...")
             # Disable tools for the follow-up to get a text response
             tool_defs = None
+
+        # Done — reset to listening
+        self._publish_status("Listening...")

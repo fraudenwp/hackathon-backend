@@ -62,7 +62,7 @@ class RagService:
             embedding_function=self._embedding_fn,
         )
 
-    def add_document(self, user_id: str, doc_id: str, text: str) -> int:
+    def add_document(self, user_id: str, doc_id: str, text: str, filename: str = "") -> int:
         """Chunk text and add to user's ChromaDB collection. Returns chunk count."""
         try:
             collection = self._get_collection(user_id)
@@ -73,7 +73,7 @@ class RagService:
                 return 0
 
             ids = [f"{doc_id}_{i}" for i in range(len(chunks))]
-            metadatas = [{"doc_id": doc_id, "chunk_index": i} for i in range(len(chunks))]
+            metadatas = [{"doc_id": doc_id, "chunk_index": i, "filename": filename} for i in range(len(chunks))]
 
             collection.add(
                 documents=chunks,
@@ -128,6 +128,23 @@ class RagService:
             logger.info("Document chunks deleted", doc_id=doc_id, user_id=user_id)
         except Exception as e:
             log_error(logger, "Failed to delete document chunks", e, doc_id=doc_id)
+
+    def list_documents(self, user_id: str) -> list[dict]:
+        """List unique documents for a user. Returns [{doc_id, filename}]."""
+        try:
+            collection = self._get_collection(user_id)
+            if collection.count() == 0:
+                return []
+            all_meta = collection.get(include=["metadatas"])
+            docs: dict[str, str] = {}  # doc_id -> filename
+            for m in all_meta.get("metadatas", []):
+                if m and m.get("doc_id"):
+                    doc_id = m["doc_id"]
+                    if doc_id not in docs:
+                        docs[doc_id] = m.get("filename", doc_id)
+            return [{"doc_id": did, "filename": fn} for did, fn in docs.items()]
+        except Exception:
+            return []
 
     def has_documents(self, user_id: str) -> bool:
         """Check if user has any embedded documents"""

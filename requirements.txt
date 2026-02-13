@@ -96,6 +96,7 @@ chromadb==1.5.0
     # via -r requirements.in
 click==8.3.1
     # via
+    #   duckduckgo-search
     #   livekit-agents
     #   typer
     #   uvicorn
@@ -118,6 +119,8 @@ dnspython==2.8.0
     # via email-validator
 docstring-parser==0.17.0
     # via livekit-agents
+duckduckgo-search==8.1.1
+    # via -r requirements.in
 durationpy==0.10
     # via kubernetes
 ecdsa==0.19.1
@@ -277,7 +280,9 @@ livekit-protocol==1.1.2
     #   livekit-agents
     #   livekit-api
 lxml==6.0.2
-    # via python-docx
+    # via
+    #   duckduckgo-search
+    #   python-docx
 mako==1.3.10
     # via alembic
 markdown-it-py==4.0.0
@@ -385,6 +390,8 @@ pillow-heif==1.2.0
     # via -r requirements.in
 posthog==5.4.0
     # via chromadb
+primp==0.15.0
+    # via duckduckgo-search
 prometheus-client==0.24.1
     # via livekit-agents
 propcache==0.4.1

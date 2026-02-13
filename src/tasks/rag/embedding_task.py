@@ -72,6 +72,7 @@ async def process_document_embedding(doc_id: str):
             user_id=doc.user_id,
             doc_id=doc_id,
             text=text,
+            filename=doc.filename,
         )
 
         # Update status to ready
