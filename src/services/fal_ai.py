@@ -79,7 +79,7 @@ class FalAIService:
     async def generate_llm_response(
         self,
         messages: list,
-        model: str = "meta-llama/llama-3.1-70b-instruct",
+            model: str = "openai/gpt-4o-mini",
         **kwargs: Any,
     ) -> str:
         """Non-streaming LLM call — returns complete response text."""

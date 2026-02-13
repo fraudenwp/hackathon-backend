@@ -161,10 +161,11 @@ class VoiceAgent:
                     language="tr",
                 ),
                 llm=FalLLM(
-                    model="meta-llama/llama-3.1-70b-instruct",
+                    model="openai/gpt-4o-mini",
                     temperature=0.7,
                     user_id=self.user_id,
                     doc_ids=self.doc_ids,
+                    room_name=self.room_name,
                     on_status=publish_status,
                 ),
                 tts=lk_openai.TTS(

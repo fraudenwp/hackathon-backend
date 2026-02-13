@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 
-from src.models.sqlmodels.voice_conversation import VoiceConversation
+from src.models.sqlmodels.voice_conversation import VoiceConversation, VoiceMessage
 
 
 async def create_conversation(
@@ -34,6 +34,48 @@ async def list_user_conversations(
 ) -> List[VoiceConversation]:
     result = await db.execute(
         select(VoiceConversation).where(VoiceConversation.user_id == user_id)
+    )
+    return result.scalars().all()
+
+
+async def list_agent_conversations(
+    db: AsyncSession, agent_id: str
+) -> List[VoiceConversation]:
+    result = await db.execute(
+        select(VoiceConversation)
+        .where(VoiceConversation.agent_id == agent_id)
+        .order_by(VoiceConversation.created_at.desc())
+    )
+    return result.scalars().all()
+
+
+async def create_message(
+    db: AsyncSession,
+    conversation_id: str,
+    participant_identity: str,
+    participant_name: str,
+    message_type: str,
+    content: str,
+) -> VoiceMessage:
+    msg = VoiceMessage(
+        conversation_id=conversation_id,
+        participant_identity=participant_identity,
+        participant_name=participant_name,
+        message_type=message_type,
+        content=content,
+    )
+    db.add(msg)
+    await db.commit()
+    return msg
+
+
+async def list_conversation_messages(
+    db: AsyncSession, conversation_id: str
+) -> List[VoiceMessage]:
+    result = await db.execute(
+        select(VoiceMessage)
+        .where(VoiceMessage.conversation_id == conversation_id)
+        .order_by(VoiceMessage.timestamp.asc())
     )
     return result.scalars().all()
 

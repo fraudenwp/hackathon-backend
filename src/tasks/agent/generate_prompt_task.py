@@ -53,7 +53,7 @@ async def generate_agent_prompt(agent_id: str):
 
         system_prompt = await fal_ai_service.generate_llm_response(
             messages=messages,
-            model="meta-llama/llama-3.1-70b-instruct",
+            model="openai/gpt-4o-mini",
             temperature=0.7,
             max_tokens=800,
         )

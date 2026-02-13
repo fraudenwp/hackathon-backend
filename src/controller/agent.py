@@ -5,6 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from src.crud.auth import AuthCRUD
 from src.crud import agent as agent_crud
+from src.crud import voice_conversation as conv_crud
 from src.models.basemodels.agent import (
     AgentCreateRequest,
     AgentUpdateRequest,
@@ -244,3 +245,41 @@ class AgentController:
             )
             for d in docs
         ]
+
+    @router.get("/{agent_id}/conversations")
+    async def get_agent_conversations(
+        agent_id: str,
+        current_user: Annotated[
+            User, Security(AuthCRUD.get_current_user_with_access())
+        ],
+        db: AsyncSession = Depends(get_session),
+    ) -> list[dict]:
+        """Get conversations for an agent"""
+        agent = await agent_crud.get_agent(db, agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent bulunamadi")
+        if agent.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Yetkisiz islem")
+
+        conversations = await conv_crud.list_agent_conversations(db, agent_id)
+        result = []
+        for conv in conversations:
+            messages = await conv_crud.list_conversation_messages(db, conv.id)
+            result.append({
+                "id": conv.id,
+                "room_name": conv.room_name,
+                "status": conv.status,
+                "started_at": conv.started_at.isoformat() if conv.started_at else None,
+                "ended_at": conv.ended_at.isoformat() if conv.ended_at else None,
+                "message_count": len(messages),
+                "messages": [
+                    {
+                        "id": m.id,
+                        "role": "user" if m.message_type == "transcript" else "agent",
+                        "content": m.content,
+                        "timestamp": m.timestamp.isoformat(),
+                    }
+                    for m in messages
+                ],
+            })
+        return result

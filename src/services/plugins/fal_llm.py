@@ -41,10 +41,11 @@ class FalLLM(LLM):
 
     def __init__(
         self,
-        model: str = "meta-llama/llama-3.1-70b-instruct",
+        model: str = "openai/gpt-4o-mini",
         temperature: float = 0.7,
         user_id: Optional[str] = None,
         doc_ids: Optional[list[str]] = None,
+        room_name: Optional[str] = None,
         on_status: Optional[Callable[[str], Any]] = None,
     ):
         super().__init__()
@@ -52,6 +53,7 @@ class FalLLM(LLM):
         self._temperature = temperature
         self._user_id = user_id
         self._doc_ids = doc_ids
+        self._room_name = room_name
         self._on_status = on_status
 
     def chat(
@@ -73,6 +75,7 @@ class FalLLM(LLM):
             temperature=self._temperature,
             user_id=self._user_id,
             doc_ids=self._doc_ids,
+            room_name=self._room_name,
             on_status=self._on_status,
         )
 
@@ -91,6 +94,7 @@ class FalLLMStream(LLMStream):
         temperature: float,
         user_id: Optional[str] = None,
         doc_ids: Optional[list[str]] = None,
+        room_name: Optional[str] = None,
         on_status: Optional[Callable[[str], Any]] = None,
     ) -> None:
         super().__init__(
@@ -100,6 +104,7 @@ class FalLLMStream(LLMStream):
         self._temperature = temperature
         self._user_id = user_id
         self._doc_ids = doc_ids
+        self._room_name = room_name
         self._on_status = on_status
 
     def _publish_status(self, status: str) -> None:
@@ -159,6 +164,29 @@ class FalLLMStream(LLMStream):
             logger.warning("RAG context injection failed", error=str(e))
             return messages
 
+    async def _save_message(self, role: str, content: str) -> None:
+        """Save a message to the database (fire-and-forget)"""
+        if not self._room_name or not content.strip():
+            return
+        try:
+            from src.models.database import db as database
+            from src.crud.voice_conversation import get_conversation_by_room, create_message
+
+            async with database.get_session_context() as db:
+                conv = await get_conversation_by_room(db, self._room_name)
+                if not conv:
+                    return
+                await create_message(
+                    db=db,
+                    conversation_id=conv.id,
+                    participant_identity="user" if role == "user" else "agent",
+                    participant_name="User" if role == "user" else "AI Assistant",
+                    message_type="transcript" if role == "user" else "ai_response",
+                    content=content.strip(),
+                )
+        except Exception as e:
+            logger.warning("Failed to save message", error=str(e))
+
     async def _run(self) -> None:
         """Stream tokens with tool call support."""
         from src.services.tools import tool_registry
@@ -169,6 +197,15 @@ class FalLLMStream(LLMStream):
                 continue
             messages.append({"role": msg.role, "content": msg.text_content or ""})
 
+        # Save user's last message
+        user_text = ""
+        for msg in reversed(messages):
+            if msg["role"] == "user" and msg["content"]:
+                user_text = msg["content"]
+                break
+        if user_text:
+            await self._save_message("user", user_text)
+
         # Inject RAG context
         self._publish_status("Thinking...")
         messages = self._inject_rag_context(messages)
@@ -177,6 +214,7 @@ class FalLLMStream(LLMStream):
         tool_defs = tool_registry.to_openai_functions() or None
 
         request_id = "fal-response"
+        full_response = ""  # Accumulate full AI response for saving
 
         for _round in range(MAX_TOOL_ROUNDS):
             # Accumulate tool_calls from streamed chunks
@@ -195,6 +233,7 @@ class FalLLMStream(LLMStream):
 
                 # Stream content tokens to TTS
                 if delta.get("content"):
+                    full_response += delta["content"]
                     self._event_ch.send_nowait(
                         ChatChunk(
                             id=request_id,
@@ -279,6 +318,10 @@ class FalLLMStream(LLMStream):
             self._publish_status("Generating response...")
             # Disable tools for the follow-up to get a text response
             tool_defs = None
+
+        # Save AI response to DB
+        if full_response:
+            await self._save_message("assistant", full_response)
 
         # Signal that LLM processing is done (TTS may still be playing)
         self._publish_status("_done")
