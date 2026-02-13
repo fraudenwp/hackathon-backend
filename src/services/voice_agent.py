@@ -96,11 +96,13 @@ class VoiceAgent:
         agent_name: str = "AI Assistant",
         system_prompt: Optional[str] = None,
         user_id: Optional[str] = None,
+        doc_ids: Optional[list[str]] = None,
     ):
         self.room_name = room_name
         self.agent_name = agent_name
-        self.system_prompt = system_prompt or "You are a helpful AI assistant."
+        self.system_prompt = system_prompt or _DEFAULT_SYSTEM_PROMPT
         self.user_id = user_id
+        self.doc_ids = doc_ids
 
         self.room: Optional[rtc.Room] = None
         self.session: Optional[AgentSession] = None
@@ -162,6 +164,7 @@ class VoiceAgent:
                     model="meta-llama/llama-3.1-70b-instruct",
                     temperature=0.7,
                     user_id=self.user_id,
+                    doc_ids=self.doc_ids,
                     on_status=publish_status,
                 ),
                 tts=lk_openai.TTS(
@@ -226,12 +229,13 @@ async def start_agent(
     room_name: str,
     system_prompt: Optional[str] = None,
     user_id: Optional[str] = None,
+    doc_ids: Optional[list[str]] = None,
 ) -> VoiceAgent:
     """Start a voice agent in a room"""
     if room_name in active_agents:
         raise ValueError(f"Agent already running in room {room_name}")
 
-    agent = VoiceAgent(room_name, system_prompt=system_prompt, user_id=user_id)
+    agent = VoiceAgent(room_name, system_prompt=system_prompt, user_id=user_id, doc_ids=doc_ids)
     await agent.start()
     active_agents[room_name] = agent
 

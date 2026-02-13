@@ -76,6 +76,38 @@ class FalAIService:
             )
             raise
 
+    async def generate_llm_response(
+        self,
+        messages: list,
+        model: str = "meta-llama/llama-3.1-70b-instruct",
+        **kwargs: Any,
+    ) -> str:
+        """Non-streaming LLM call — returns complete response text."""
+        endpoint = f"{self.BASE_URL}/{self.LLM_ENDPOINT}"
+
+        payload: Dict[str, Any] = {
+            "stream": False,
+            "messages": messages,
+            "model": model,
+            **kwargs,
+        }
+
+        try:
+            response = await self._client.post(endpoint, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            return data["choices"][0]["message"]["content"]
+
+        except httpx.HTTPError as e:
+            log_error(
+                logger,
+                "LLM response failed",
+                e,
+                endpoint=endpoint,
+                status_code=getattr(e.response, "status_code", None),
+            )
+            raise
+
 
 # Singleton instance
 fal_ai_service = FalAIService()

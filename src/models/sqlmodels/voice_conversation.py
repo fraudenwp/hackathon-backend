@@ -12,6 +12,7 @@ class VoiceConversation(SQLModel, table=True):
         default_factory=lambda: str(uuid.uuid4()), primary_key=True, index=True
     )
     user_id: str = Field(foreign_key="user.id", index=True)
+    agent_id: Optional[str] = Field(default=None, foreign_key="agent.id", index=True)
     room_name: str = Field(index=True, unique=True)
     room_sid: Optional[str] = None
 

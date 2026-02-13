@@ -8,10 +8,11 @@ from src.models.sqlmodels.voice_conversation import VoiceConversation
 
 
 async def create_conversation(
-    db: AsyncSession, user_id: uuid.UUID, room_name: str, room_sid: str
+    db: AsyncSession, user_id: uuid.UUID, room_name: str, room_sid: str,
+    agent_id: Optional[str] = None,
 ) -> VoiceConversation:
     conversation = VoiceConversation(
-        user_id=user_id, room_name=room_name, room_sid=room_sid
+        user_id=user_id, room_name=room_name, room_sid=room_sid, agent_id=agent_id,
     )
     db.add(conversation)
     await db.commit()

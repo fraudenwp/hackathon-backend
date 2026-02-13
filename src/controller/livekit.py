@@ -5,6 +5,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 import uuid
 
 from src.crud.auth import AuthCRUD
+from src.crud import agent as agent_crud
 from src.models.dependency import get_session
 from src.models.sqlmodels.user import User
 from src.models.basemodels.livekit import (
@@ -41,6 +42,20 @@ class LiveKitController:
         db: AsyncSession = Depends(get_session),
     ) -> MakeCallResponse:
         """Create room, start AI agent, and return connection token - all in one call"""
+        # Resolve agent_id → system_prompt + doc_ids
+        system_prompt = request.system_prompt
+        doc_ids = None
+
+        if request.agent_id:
+            agent = await agent_crud.get_agent(db, request.agent_id)
+            if not agent:
+                raise HTTPException(status_code=404, detail="Agent bulunamadi")
+            if agent.user_id != current_user.id:
+                raise HTTPException(status_code=403, detail="Yetkisiz islem")
+            if agent.system_prompt:
+                system_prompt = agent.system_prompt
+            doc_ids = await agent_crud.get_agent_document_ids(db, agent.id)
+
         # Generate unique room name
         room_name = f"room-{uuid.uuid4()}"
 
@@ -57,6 +72,7 @@ class LiveKitController:
             user_id=current_user.id,
             room_name=room.name,
             room_sid=room.sid,
+            agent_id=request.agent_id,
         )
 
         # Mark AI as enabled (will start in background)
@@ -74,8 +90,9 @@ class LiveKitController:
         # Start AI agent in background using Taskiq (user_id for RAG)
         await start_voice_agent_task.kiq(
             room_name,
-            system_prompt=request.system_prompt,
+            system_prompt=system_prompt,
             user_id=str(current_user.id),
+            doc_ids=doc_ids or None,
         )
 
         return MakeCallResponse(

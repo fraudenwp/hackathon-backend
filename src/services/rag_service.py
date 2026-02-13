@@ -93,17 +93,22 @@ class RagService:
             log_error(logger, "Failed to embed document", e, doc_id=doc_id)
             raise
 
-    def search(self, user_id: str, query: str, k: int = 3) -> list[dict]:
-        """Search user's documents. Returns list of {text, doc_id, score}."""
+    def search(self, user_id: str, query: str, k: int = 3, doc_ids: list[str] | None = None) -> list[dict]:
+        """Search user's documents. Optionally filter by doc_ids. Returns list of {text, doc_id, score}."""
         try:
             collection = self._get_collection(user_id)
 
             if collection.count() == 0:
                 return []
 
+            where_filter = None
+            if doc_ids:
+                where_filter = {"doc_id": {"$in": doc_ids}}
+
             results = collection.query(
                 query_texts=[query],
                 n_results=min(k, collection.count()),
+                where=where_filter,
             )
 
             items = []
@@ -129,8 +134,8 @@ class RagService:
         except Exception as e:
             log_error(logger, "Failed to delete document chunks", e, doc_id=doc_id)
 
-    def list_documents(self, user_id: str) -> list[dict]:
-        """List unique documents for a user. Returns [{doc_id, filename}]."""
+    def list_documents(self, user_id: str, doc_ids: list[str] | None = None) -> list[dict]:
+        """List unique documents for a user. Optionally filter by doc_ids. Returns [{doc_id, filename}]."""
         try:
             collection = self._get_collection(user_id)
             if collection.count() == 0:
@@ -139,9 +144,11 @@ class RagService:
             docs: dict[str, str] = {}  # doc_id -> filename
             for m in all_meta.get("metadatas", []):
                 if m and m.get("doc_id"):
-                    doc_id = m["doc_id"]
-                    if doc_id not in docs:
-                        docs[doc_id] = m.get("filename", doc_id)
+                    did = m["doc_id"]
+                    if doc_ids and did not in doc_ids:
+                        continue
+                    if did not in docs:
+                        docs[did] = m.get("filename", did)
             return [{"doc_id": did, "filename": fn} for did, fn in docs.items()]
         except Exception:
             return []

@@ -44,12 +44,14 @@ class FalLLM(LLM):
         model: str = "meta-llama/llama-3.1-70b-instruct",
         temperature: float = 0.7,
         user_id: Optional[str] = None,
+        doc_ids: Optional[list[str]] = None,
         on_status: Optional[Callable[[str], Any]] = None,
     ):
         super().__init__()
         self._model = model
         self._temperature = temperature
         self._user_id = user_id
+        self._doc_ids = doc_ids
         self._on_status = on_status
 
     def chat(
@@ -70,6 +72,7 @@ class FalLLM(LLM):
             model=self._model,
             temperature=self._temperature,
             user_id=self._user_id,
+            doc_ids=self._doc_ids,
             on_status=self._on_status,
         )
 
@@ -87,6 +90,7 @@ class FalLLMStream(LLMStream):
         model: str,
         temperature: float,
         user_id: Optional[str] = None,
+        doc_ids: Optional[list[str]] = None,
         on_status: Optional[Callable[[str], Any]] = None,
     ) -> None:
         super().__init__(
@@ -95,6 +99,7 @@ class FalLLMStream(LLMStream):
         self._model = model
         self._temperature = temperature
         self._user_id = user_id
+        self._doc_ids = doc_ids
         self._on_status = on_status
 
     def _publish_status(self, status: str) -> None:
@@ -127,7 +132,7 @@ class FalLLMStream(LLMStream):
                 return messages
 
             self._publish_status("Searching documents...")
-            results = rag_service.search(self._user_id, user_query, k=3)
+            results = rag_service.search(self._user_id, user_query, k=3, doc_ids=self._doc_ids)
             if not results:
                 return messages
 
@@ -252,9 +257,11 @@ class FalLLMStream(LLMStream):
                 except _json.JSONDecodeError:
                     args = {}
 
-                # Inject user_id for tools that need it
+                # Inject user_id and doc_ids for tools that need it
                 if self._user_id:
                     args["user_id"] = self._user_id
+                if self._doc_ids:
+                    args["doc_ids"] = self._doc_ids
 
                 status_msg = TOOL_STATUS_MAP.get(tc["name"], f"Running {tc['name']}...")
                 self._publish_status(status_msg)

@@ -28,7 +28,8 @@ class RoomListResponse(BaseModel):
 
 
 class MakeCallRequest(BaseModel):
-    system_prompt: Optional[str] = None  # Custom AI instructions
+    agent_id: Optional[str] = None  # Use agent's system prompt + documents
+    system_prompt: Optional[str] = None  # Custom AI instructions (overrides agent)
     max_participants: int = Field(default=50, ge=2, le=100)
     empty_timeout: int = Field(default=300, ge=60, le=3600)
 

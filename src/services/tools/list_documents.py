@@ -38,7 +38,8 @@ class ListDocumentsTool(BaseTool):
         try:
             from src.services.rag_service import rag_service
 
-            docs = rag_service.list_documents(user_id)
+            doc_ids = kwargs.get("doc_ids")
+            docs = rag_service.list_documents(user_id, doc_ids=doc_ids)
             if not docs:
                 return "Henuz yuklenmiş döküman bulunmuyor."
 
