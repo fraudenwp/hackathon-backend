@@ -176,7 +176,6 @@ class FalLLMStream(LLMStream):
         for _round in range(MAX_TOOL_ROUNDS):
             # Accumulate tool_calls from streamed chunks
             tool_calls_acc: dict[int, dict] = {}  # index -> {id, name, arguments}
-            has_content = False
             self._publish_status("Generating response...")
 
             async for chunk in fal_ai_service.generate_llm_response_stream_raw(
@@ -191,9 +190,6 @@ class FalLLMStream(LLMStream):
 
                 # Stream content tokens to TTS
                 if delta.get("content"):
-                    if not has_content:
-                        self._publish_status("Speaking...")
-                    has_content = True
                     self._event_ch.send_nowait(
                         ChatChunk(
                             id=request_id,
@@ -277,5 +273,5 @@ class FalLLMStream(LLMStream):
             # Disable tools for the follow-up to get a text response
             tool_defs = None
 
-        # Done — reset to listening
-        self._publish_status("Listening...")
+        # Signal that LLM processing is done (TTS may still be playing)
+        self._publish_status("_done")
