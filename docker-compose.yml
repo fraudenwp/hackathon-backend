@@ -40,7 +40,7 @@ services:
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`komunite-api.omeryahyadiri.com`)"
-      - "traefik.http.routers.backend.entrypoints=resai-web"
+      - "traefik.http.routers.backend.entrypoints=web"
       - "traefik.http.routers.backend.middlewares=redirect-to-https@docker"
       - "traefik.http.routers.backend-websecure.rule=Host(`komunite-api.omeryahyadiri.com`)"
       - "traefik.http.routers.backend-websecure.entrypoints=websecure"
@@ -60,13 +60,7 @@ services:
           memory: 2G
     restart: unless-stopped
     healthcheck:
-      test:
-        [
-          "CMD",
-          "python",
-          "-c",
-          "import requests; requests.get('http://localhost:8005/health', timeout=5)",
-        ]
+      test: [ "CMD", "python", "-c", "import requests; requests.get('http://localhost:8005/health', timeout=5)" ]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -118,14 +112,7 @@ services:
 
   valkey-worker:
     image: valkey/valkey:8.1.4
-    command:
-      [
-        "valkey-server",
-        "--maxmemory",
-        "256mb",
-        "--maxmemory-policy",
-        "allkeys-lru",
-      ]
+    command: [ "valkey-server", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru" ]
     ports:
       - 6385:6379
     networks:
@@ -140,7 +127,7 @@ services:
           memory: 128M
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "valkey-cli", "ping"]
+      test: [ "CMD", "valkey-cli", "ping" ]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -151,8 +138,7 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
-
-# NOTE: LiveKit Cloud is used via environment variables (LIVEKIT_URL, LIVEKIT_WS_URL, etc.)
+  # NOTE: LiveKit Cloud is used via environment variables (LIVEKIT_URL, LIVEKIT_WS_URL, etc.)
   # Local LiveKit server is commented out - uncomment if you need to run it locally
 
   # livekit:
