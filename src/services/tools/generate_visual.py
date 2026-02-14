@@ -1,4 +1,4 @@
-"""Visual Generation Tool — uses fal.ai image models to create diagrams/visuals"""
+"""Visual Generation Tool — uses fal.ai GPT-Image 1.5 to create high-quality visuals"""
 
 from typing import Any
 
@@ -10,11 +10,11 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-FAL_IMAGE_ENDPOINT = "https://fal.run/fal-ai/flux-pro/v1.1"
+FAL_IMAGE_ENDPOINT = "https://fal.run/fal-ai/gpt-image-1.5"
 
 
 class GenerateVisualTool(BaseTool):
-    """Generate educational visuals/diagrams via fal.ai image generation"""
+    """Generate educational visuals/diagrams via fal.ai GPT-Image 1.5"""
 
     @property
     def name(self) -> str:
@@ -54,7 +54,7 @@ class GenerateVisualTool(BaseTool):
             return "No image prompt provided"
 
         try:
-            async with httpx.AsyncClient(timeout=60.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
                     FAL_IMAGE_ENDPOINT,
                     headers={
@@ -63,9 +63,10 @@ class GenerateVisualTool(BaseTool):
                     },
                     json={
                         "prompt": prompt,
-                        "image_size": "landscape_16_9",
+                        "image_size": "1536x1024",
+                        "quality": "high",
                         "num_images": 1,
-                        "safety_tolerance": "5",
+                        "output_format": "png",
                     },
                 )
                 response.raise_for_status()
@@ -82,7 +83,6 @@ class GenerateVisualTool(BaseTool):
                 logger.info("Visual generated", prompt=prompt[:80], url=image_url[:100])
 
                 # Return URL — the LLM plugin will broadcast this to frontend
-                # via the _on_visual callback
                 return f"__VISUAL_URL__:{image_url}"
 
         except httpx.HTTPError as e:

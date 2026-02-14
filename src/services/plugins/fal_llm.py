@@ -350,6 +350,8 @@ class FalLLMStream(LLMStream):
                 if result.startswith("__VISUAL_URL__:"):
                     image_url = result[len("__VISUAL_URL__:"):]
                     self._publish_visual(image_url)
+                    # Save visual URL as a message in conversation history
+                    asyncio.create_task(self._save_message("assistant", f"__IMAGE__:{image_url}"))
                     # Give the LLM a clean result
                     result = "Görsel başarıyla oluşturuldu ve kullanıcının ekranında gösteriliyor. Görseli açıklamaya devam et."
 
