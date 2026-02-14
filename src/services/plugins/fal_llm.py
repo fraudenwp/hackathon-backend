@@ -126,6 +126,14 @@ class FalLLMStream(LLMStream):
             except Exception:
                 pass
 
+    def _publish_visual_loading(self) -> None:
+        """Tell frontend to show visual loading placeholder immediately"""
+        if self._on_status:
+            try:
+                self._on_status("__VISUAL_LOADING__")
+            except Exception:
+                pass
+
     def _publish_visual(self, image_url: str) -> None:
         """Send generated visual URL to frontend via status callback (JSON payload)"""
         if self._on_status:
@@ -226,10 +234,9 @@ class FalLLMStream(LLMStream):
         if user_text:
             asyncio.create_task(self._save_message("user", user_text))
 
-        # Inject RAG context (skip for very short messages like greetings)
+        # NOTE: RAG context injection removed — the LLM uses search_documents
+        # tool proactively, avoiding redundant embedding calls on every turn.
         self._publish_status("Thinking...")
-        if len(user_text.split()) >= 2:
-            messages = self._inject_rag_context(messages)
 
         # Get tool definitions
         tool_defs = tool_registry.to_openai_functions() or None
@@ -247,8 +254,8 @@ class FalLLMStream(LLMStream):
             else:
                 self._publish_status("Thinking...")
 
-            # Normal: voice response. After tools: needs room to synthesize results.
-            tokens = 4096 if used_tools else 1024
+            # Keep tokens low for fast TTFT. After tools: more room to synthesize.
+            tokens = 2048 if used_tools else 512
 
             async for chunk in fal_ai_service.generate_llm_response_stream_raw(
                 messages=messages,
@@ -306,7 +313,7 @@ class FalLLMStream(LLMStream):
             if not tool_calls_acc:
                 break
 
-            # Execute tool calls
+            # Execute tool calls in PARALLEL for lower latency
             used_tools = True
             logger.info("Executing tool calls", count=len(tool_calls_acc))
 
@@ -321,43 +328,61 @@ class FalLLMStream(LLMStream):
                 })
             messages.append(assistant_msg)
 
-            # Execute each tool and add results
-            for idx in sorted(tool_calls_acc.keys()):
-                tc = tool_calls_acc[idx]
+            # Prepare all tool tasks for parallel execution
+            async def _exec_tool(tc_entry: dict) -> tuple[dict, str]:
+                """Execute a single tool and return (tc_entry, result)."""
                 try:
-                    args = _json.loads(tc["arguments"]) if tc["arguments"] else {}
+                    args = _json.loads(tc_entry["arguments"]) if tc_entry["arguments"] else {}
                 except _json.JSONDecodeError:
                     args = {}
 
-                # Inject user_id and doc_ids for tools that need it
                 if self._user_id:
                     args["user_id"] = self._user_id
                 if self._doc_ids:
                     args["doc_ids"] = self._doc_ids
 
-                status_msg = TOOL_STATUS_MAP.get(tc["name"], f"Running {tc['name']}...")
+                # Inject visual callback for generate_visual (non-blocking)
+                if tc_entry["name"] == "generate_visual":
+                    args["_on_visual"] = self._publish_visual
+                    args["_on_visual_loading"] = self._publish_visual_loading
+                    args["_room_name"] = self._room_name
+
+                status_msg = TOOL_STATUS_MAP.get(tc_entry["name"], f"Running {tc_entry['name']}...")
                 self._publish_status(status_msg)
 
-                result = await tool_registry.execute(tc["name"], **args)
+                result = await tool_registry.execute(tc_entry["name"], **args)
                 logger.info(
                     "Tool executed",
-                    tool=tc["name"],
+                    tool=tc_entry["name"],
                     result_len=len(result),
                     result_preview=result[:300],
                 )
+                return tc_entry, result
+
+            # Run all tools in parallel
+            tool_tasks = [
+                _exec_tool(tool_calls_acc[idx])
+                for idx in sorted(tool_calls_acc.keys())
+            ]
+            tool_results = await asyncio.gather(*tool_tasks, return_exceptions=True)
+
+            # Process results in order
+            for item in tool_results:
+                if isinstance(item, Exception):
+                    logger.warning("Tool execution failed", error=str(item))
+                    continue
+                tc_entry, result = item
 
                 # Intercept visual URL and broadcast to frontend
                 if result.startswith("__VISUAL_URL__:"):
                     image_url = result[len("__VISUAL_URL__:"):]
                     self._publish_visual(image_url)
-                    # Save visual URL as a message in conversation history
                     asyncio.create_task(self._save_message("assistant", f"__IMAGE__:{image_url}"))
-                    # Give the LLM a clean result
-                    result = "Görsel başarıyla oluşturuldu ve kullanıcının ekranında gösteriliyor. Görseli açıklamaya devam et."
+                    result = "Visual successfully generated and displayed on user's screen. Continue explaining the visual."
 
                 messages.append({
                     "role": "tool",
-                    "tool_call_id": tc["id"],
+                    "tool_call_id": tc_entry["id"],
                     "content": result,
                 })
 
@@ -366,9 +391,9 @@ class FalLLMStream(LLMStream):
             # Disable tools for the follow-up to get a text response
             tool_defs = None
 
-        # Save AI response to DB
+        # Save AI response to DB (fire-and-forget — don't block TTS)
         if full_response:
-            await self._save_message("assistant", full_response)
+            asyncio.create_task(self._save_message("assistant", full_response))
 
         # Signal that LLM processing is done (TTS may still be playing)
         self._publish_status("_done")
