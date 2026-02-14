@@ -82,6 +82,10 @@ services:
       dockerfile: Dockerfile
     command: >
       sh -c "python -m taskiq worker --workers 4 src.tasks.taskiq_setup:broker --fs-discover --log-level=INFO"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+      - 1.1.1.1
     environment:
       <<: *common-env
       COMMAND: worker
