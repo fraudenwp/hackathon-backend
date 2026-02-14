@@ -22,7 +22,7 @@ x-common-env: &common-env
   LIVEKIT_WS_URL: ${LIVEKIT_WS_URL}
 
 services:
-  web:
+  resai-web:
     build:
       context: .
       dockerfile: Dockerfile
@@ -71,7 +71,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  worker:
+  resai-worker:
     build:
       context: .
       dockerfile: Dockerfile
@@ -105,7 +105,7 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  valkey-worker:
+  resai-valkey-worker:
     image: valkey/valkey:8.1.4
     command:
       [
