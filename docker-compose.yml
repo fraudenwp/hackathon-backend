@@ -83,7 +83,7 @@ services:
       CHROMA_PERSIST_DIR: /data/chromadb
     volumes:
       - chromadb_data:/data/chromadb
-ports:
+    ports:
       - "6915:6900"
     deploy:
       resources:
