@@ -36,6 +36,9 @@ services:
     environment:
       <<: *common-env
       COMMAND: web
+      CHROMA_PERSIST_DIR: /data/chromadb
+    volumes:
+      - chromadb_data:/data/chromadb
     deploy:
       resources:
         limits:
@@ -77,6 +80,9 @@ services:
     environment:
       <<: *common-env
       COMMAND: worker
+      CHROMA_PERSIST_DIR: /data/chromadb
+    volumes:
+      - chromadb_data:/data/chromadb
     ports:
       - "6909:6900"
     deploy:
@@ -135,44 +141,37 @@ services:
         max-size: "5m"
         max-file: "2"
 
-  livekit:
-    image: livekit/livekit-server:latest
-    command: --config /etc/livekit.yaml
-    ports:
-      - "7880:7880"
-      - "7881:7881"
-      - "50000-50100:50000-50100/udp"
-    expose:
-      - 7880
-      - 7881
-    volumes:
-      - ./livekit-config.yaml:/etc/livekit.yaml:ro
-    networks:
-      - resai_network
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: "2.0"
-          memory: 2G
-        reservations:
-          cpus: "1.0"
-          memory: 1G
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:7880/"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
+# NOTE: LiveKit Cloud is used via environment variables (LIVEKIT_URL, LIVEKIT_WS_URL, etc.)
+  # Local LiveKit server is commented out - uncomment if you need to run it locally
+
+  # livekit:
+  #   image: livekit/livekit-server:latest
+  #   command: --config /etc/livekit.yaml
+  #   ports:
+  #     - "7880:7880"
+  #     - "7881:7881"
+  #     - "50000-50100:50000-50100/udp"
+  #   volumes:
+  #     - ./livekit-config.yaml:/etc/livekit.yaml:ro
+  #   networks:
+  #     - resai_network
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: "2.0"
+  #         memory: 2G
+  #   logging:
+  #     driver: "json-file"
+  #     options:
+  #       max-size: "10m"
+  #       max-file: "3"
 
 volumes:
   valkey_data:
     name: resai_valkey_data
+  chromadb_data:
+    name: resai_chromadb_data
 
 networks:
   resai_network:
