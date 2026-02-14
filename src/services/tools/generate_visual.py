@@ -10,7 +10,7 @@ from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-FAL_IMAGE_ENDPOINT = "https://fal.run/fal-ai/flux/schnell"
+FAL_IMAGE_ENDPOINT = "https://fal.run/fal-ai/flux-pro/v1.1"
 
 
 class GenerateVisualTool(BaseTool):
@@ -54,7 +54,7 @@ class GenerateVisualTool(BaseTool):
             return "No image prompt provided"
 
         try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     FAL_IMAGE_ENDPOINT,
                     headers={
@@ -65,7 +65,7 @@ class GenerateVisualTool(BaseTool):
                         "prompt": prompt,
                         "image_size": "landscape_16_9",
                         "num_images": 1,
-                        "enable_safety_checker": False,
+                        "safety_tolerance": "5",
                     },
                 )
                 response.raise_for_status()

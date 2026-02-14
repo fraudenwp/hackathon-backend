@@ -566,18 +566,19 @@ structlog==25.5.0
     # via -r requirements.in
 sympy==1.14.0
     # via onnxruntime
-taskiq[orjson,reload]==0.12.1
+taskiq[orjson,reload]==0.11.20
     # via
     #   -r requirements.in
     #   taskiq-fastapi
     #   taskiq-redis
+
 taskiq-dependencies==1.5.7
     # via
     #   -r requirements.in
     #   taskiq
-taskiq-fastapi==0.4.0
+taskiq-fastapi==0.3.6
     # via -r requirements.in
-taskiq-redis==1.2.2
+taskiq-redis==1.1.2
     # via -r requirements.in
 tenacity==9.1.4
     # via
