@@ -37,6 +37,17 @@ services:
       <<: *common-env
       COMMAND: web
       CHROMA_PERSIST_DIR: /data/chromadb
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`komunite-api.omeryahyadiri.com`)"
+      - "traefik.http.routers.backend.entrypoints=resai-web"
+      - "traefik.http.routers.backend.middlewares=redirect-to-https@docker"
+      - "traefik.http.routers.backend-websecure.rule=Host(`komunite-api.omeryahyadiri.com`)"
+      - "traefik.http.routers.backend-websecure.entrypoints=websecure"
+      - "traefik.http.routers.backend-websecure.tls=true"
+      - "traefik.http.routers.backend-websecure.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8005"
+
     volumes:
       - chromadb_data:/data/chromadb
     deploy:
