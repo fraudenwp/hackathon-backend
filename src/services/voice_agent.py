@@ -6,6 +6,7 @@ import asyncio
 import json as _json
 from typing import Dict, Optional
 
+import httpx
 import openai as oai
 from livekit import api, rtc
 from livekit.agents import Agent, AgentSession
@@ -14,7 +15,7 @@ from livekit.plugins.silero import VAD
 
 from src.constants.env import FAL_API_KEY, LIVEKIT_API_KEY, LIVEKIT_API_SECRET, LIVEKIT_WS_URL
 from src.services.latency_tracker import latency_tracker
-from src.services.plugins import FalLLM
+from src.services.plugins import FalLLM, FalSTT
 from src.utils.logger import get_logger, log_error
 
 logger = get_logger(__name__)
@@ -29,6 +30,15 @@ _stt_client = oai.AsyncClient(
     api_key="stub",
     base_url=f"{FAL_BASE_URL}/{FAL_STT_APP}",
     default_headers=_fal_headers,
+    http_client=httpx.AsyncClient(
+        timeout=httpx.Timeout(connect=3.0, read=15.0, write=5.0, pool=5.0),
+        follow_redirects=True,
+        limits=httpx.Limits(
+            max_connections=20,
+            max_keepalive_connections=10,
+            keepalive_expiry=120,
+        ),
+    ),
 )
 
 _tts_client = oai.AsyncClient(
@@ -159,12 +169,21 @@ class VoiceAgent:
                     self.room.local_participant.publish_data(payload, topic="agent_status")
                 )
 
+            # Create Silero VAD (shared between session + STT for consistent boundaries)
+            silero_vad = VAD.load(
+                min_speech_duration=0.2,
+                min_silence_duration=0.35,
+                prefix_padding_duration=0.2,
+                activation_threshold=0.55,
+            )
+
             # Create agent session — STT & TTS via LiveKit OpenAI plugin with fal.ai base_url
             self.session = AgentSession(
-                stt=lk_openai.STT(
+                stt=FalSTT(
                     client=_stt_client,
                     model="freya-stt-v1",
                     language="tr",
+                    vad=silero_vad,
                 ),
                 llm=FalLLM(
                     model="openai/gpt-4o-mini",
@@ -179,12 +198,7 @@ class VoiceAgent:
                     model="freya-tts-v1",
                     voice="alloy",
                 ),
-                vad=VAD.load(
-                    min_speech_duration=0.2,
-                    min_silence_duration=0.35,
-                    prefix_padding_duration=0.2,
-                    activation_threshold=0.55,
-                ),
+                vad=silero_vad,
                 # Echo/feedback loop prevention — allow interruptions but
                 # require real speech (not just echo picked up by mic)
                 allow_interruptions=True,
