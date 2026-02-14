@@ -115,8 +115,8 @@ services:
         "--maxmemory-policy",
         "allkeys-lru",
       ]
-    expose:
-      - 6379
+    ports:
+      - 6385:6379
     networks:
       - resai_network
     deploy:
