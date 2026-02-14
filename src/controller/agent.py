@@ -6,6 +6,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from src.crud.auth import AuthCRUD
 from src.crud import agent as agent_crud
 from src.crud import voice_conversation as conv_crud
+from src.services.fal_ai import fal_ai_service
 from src.models.basemodels.agent import (
     AgentCreateRequest,
     AgentUpdateRequest,
@@ -276,6 +277,7 @@ class AgentController:
                 "status": conv.status,
                 "started_at": conv.started_at.isoformat() if conv.started_at else None,
                 "ended_at": conv.ended_at.isoformat() if conv.ended_at else None,
+                "summary": conv.summary,
                 "message_count": len(messages),
                 "messages": [
                     {
@@ -294,3 +296,71 @@ class AgentController:
             "page_size": page_size,
             "total_pages": (total + page_size - 1) // page_size if total > 0 else 0,
         }
+
+    @router.post("/{agent_id}/conversations/{conversation_id}/summary")
+    async def generate_conversation_summary(
+        agent_id: str,
+        conversation_id: str,
+        current_user: Annotated[
+            User, Security(AuthCRUD.get_current_user_with_access())
+        ],
+        db: AsyncSession = Depends(get_session),
+    ) -> dict:
+        """Generate or retrieve a summary for a conversation"""
+        agent = await agent_crud.get_agent(db, agent_id)
+        if not agent:
+            raise HTTPException(status_code=404, detail="Agent bulunamadi")
+        if agent.user_id != current_user.id:
+            raise HTTPException(status_code=403, detail="Yetkisiz islem")
+
+        # Check if conversation exists and belongs to this agent
+        conversations, _ = await conv_crud.list_agent_conversations(db, agent_id, skip=0, limit=1000)
+        conv = next((c for c in conversations if c.id == conversation_id), None)
+        if not conv:
+            raise HTTPException(status_code=404, detail="Konusma bulunamadi")
+
+        # Return cached summary if exists
+        if conv.summary:
+            return {"summary": conv.summary}
+
+        # Get messages
+        messages = await conv_crud.list_conversation_messages(db, conversation_id)
+        if not messages:
+            raise HTTPException(status_code=400, detail="Bu konusmada mesaj yok")
+
+        # Build conversation text for LLM
+        conversation_text = "\n".join(
+            f"{'Kullanıcı' if m.message_type == 'transcript' else 'Asistan'}: {m.content}"
+            for m in messages
+        )
+
+        # Generate summary via LLM
+        summary_prompt = [
+            {
+                "role": "system",
+                "content": (
+                    "Sen bir sesli sohbet özetleyicisisin. Aşağıda kullanıcı ile AI asistan arasındaki konuşma var.\n"
+                    "Bu konuşmayı Türkçe olarak özetle.\n"
+                    "Her madde \"•\" ile başlasın, kısa ve öz olsun. Maddeler arasında boş satır bırakma.\n"
+                    "En fazla 8 madde yaz. Selamlaşma, teşekkür gibi trivial konuları atlayıp sadece bilgi içeren konuları özetle.\n"
+                    "Sadece maddeleri yaz, başlık veya açıklama ekleme."
+                ),
+            },
+            {"role": "user", "content": conversation_text},
+        ]
+
+        try:
+            summary = await fal_ai_service.generate_llm_response(
+                messages=summary_prompt,
+                model="openai/gpt-4o-mini",
+                temperature=0.3,
+                max_tokens=1000,
+            )
+        except Exception as e:
+            logger.error("Summary generation failed", error=str(e))
+            raise HTTPException(status_code=500, detail="Ozet olusturulamadi")
+
+        # Save to DB
+        await conv_crud.update_conversation_summary(db, conversation_id, summary)
+
+        return {"summary": summary}

@@ -31,12 +31,23 @@ async def get_conversation_by_room(
 
 
 async def list_user_conversations(
-    db: AsyncSession, user_id: uuid.UUID
-) -> List[VoiceConversation]:
-    result = await db.execute(
-        select(VoiceConversation).where(VoiceConversation.user_id == user_id)
+    db: AsyncSession, user_id: uuid.UUID, skip: int = 0, limit: int = 20
+) -> tuple[List[VoiceConversation], int]:
+    count_result = await db.execute(
+        select(func.count())
+        .select_from(VoiceConversation)
+        .where(VoiceConversation.user_id == user_id)
     )
-    return result.scalars().all()
+    total = count_result.scalar_one()
+
+    result = await db.execute(
+        select(VoiceConversation)
+        .where(VoiceConversation.user_id == user_id)
+        .order_by(VoiceConversation.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    return result.scalars().all(), total
 
 
 async def list_agent_conversations(
@@ -89,6 +100,21 @@ async def list_conversation_messages(
         .order_by(VoiceMessage.timestamp.asc())
     )
     return result.scalars().all()
+
+
+async def update_conversation_summary(
+    db: AsyncSession, conversation_id: str, summary: str,
+) -> Optional[VoiceConversation]:
+    result = await db.execute(
+        select(VoiceConversation).where(VoiceConversation.id == conversation_id)
+    )
+    conversation = result.scalar_one_or_none()
+    if not conversation:
+        return None
+    conversation.summary = summary
+    await db.commit()
+    await db.refresh(conversation)
+    return conversation
 
 
 async def end_conversation(

@@ -25,6 +25,8 @@ class VoiceConversation(SQLModel, table=True):
     total_duration_seconds: int = Field(default=0)
     participant_count: int = Field(default=0)
 
+    summary: Optional[str] = Field(default=None)
+
     config: Dict = Field(default={}, sa_column=Column(JSON, nullable=False))
 
     created_at: datetime = Field(default_factory=datetime.now)
