@@ -20,18 +20,27 @@ class FalAIService:
 
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or FAL_API_KEY
+        self._headers = {
+            "Authorization": f"Key {self.api_key}",
+            "Content-Type": "application/json",
+        }
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(20.0, connect=2.0, read=20.0),
-            headers={
-                "Authorization": f"Key {self.api_key}",
-                "Content-Type": "application/json",
-            },
+            headers=self._headers,
             http2=True,
             limits=httpx.Limits(max_connections=20, max_keepalive_connections=10),
+        )
+        # Separate client for long-running non-streaming calls (prompt generation etc.)
+        self._long_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(120.0, connect=5.0, read=120.0),
+            headers=self._headers,
+            http2=True,
+            limits=httpx.Limits(max_connections=5, max_keepalive_connections=3),
         )
 
     async def aclose(self) -> None:
         await self._client.aclose()
+        await self._long_client.aclose()
 
     async def generate_llm_response_stream_raw(
         self,
@@ -67,14 +76,20 @@ class FalAIService:
                         break
                     yield _json.loads(data)
 
-        except httpx.HTTPError as e:
+        except httpx.TimeoutException as e:
+            log_error(logger, "LLM stream (raw) timed out", e, endpoint=endpoint)
+            raise
+        except httpx.HTTPStatusError as e:
             log_error(
                 logger,
                 "LLM stream (raw) failed",
                 e,
                 endpoint=endpoint,
-                status_code=getattr(e.response, "status_code", None),
+                status_code=e.response.status_code,
             )
+            raise
+        except httpx.HTTPError as e:
+            log_error(logger, "LLM stream (raw) failed", e, endpoint=endpoint)
             raise
 
     async def generate_llm_response(
@@ -94,19 +109,25 @@ class FalAIService:
         }
 
         try:
-            response = await self._client.post(endpoint, json=payload)
+            response = await self._long_client.post(endpoint, json=payload)
             response.raise_for_status()
             data = response.json()
             return data["choices"][0]["message"]["content"]
 
-        except httpx.HTTPError as e:
+        except httpx.TimeoutException as e:
+            log_error(logger, "LLM response timed out", e, endpoint=endpoint)
+            raise
+        except httpx.HTTPStatusError as e:
             log_error(
                 logger,
                 "LLM response failed",
                 e,
                 endpoint=endpoint,
-                status_code=getattr(e.response, "status_code", None),
+                status_code=e.response.status_code,
             )
+            raise
+        except httpx.HTTPError as e:
+            log_error(logger, "LLM response failed", e, endpoint=endpoint)
             raise
 
 
