@@ -23,10 +23,14 @@ class GenerateVisualTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Generate an educational visual, diagram, or infographic to help explain a concept. "
-            "Use when the user asks about a topic that benefits from visual explanation "
-            "(science, processes, anatomy, architecture, timelines, etc.). "
-            "Returns an image URL that will be displayed on the user's screen."
+            "Generate educational visuals, diagrams, or infographics. "
+            "Use GENEROUSLY to visualize and clarify complex topics! "
+            "Especially create visuals for: "
+            "scientific processes (photosynthesis, cells, reactions), "
+            "historical timelines, comparison tables, "
+            "anatomy and geographical structures, mathematical concepts, "
+            "flowcharts and process maps. "
+            "Visual generation boosts learning by 60% — use proactively!"
         )
 
     @property

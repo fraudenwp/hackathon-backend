@@ -53,10 +53,10 @@ class WikipediaSearchTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Search Wikipedia for encyclopedic information. "
-            "Use for history, science, geography, biographies, general knowledge topics. "
-            "Returns reliable, structured information with source URL. "
-            "Write the query in the same language as the user's question."
+            "Get encyclopedic information from Wikipedia. "
+            "Use for history, science, geography, biography, and general knowledge questions. "
+            "Returns reliable, structured information. "
+            "Ideal for basic concept definitions. Write query in user's language."
         )
 
     @property

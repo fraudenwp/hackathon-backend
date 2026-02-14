@@ -42,10 +42,11 @@ class GoogleSearchTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Search the web for current information. "
-            "Use when the user asks about recent events, news, "
-            "or information you don't know. "
-            "Write the query in the same language as the user's question."
+            "Search the web for current and accurate information. "
+            "MUST use for uncertain topics — never guess! "
+            "Auto-fallback to web when documents yield no results. "
+            "Use for questions requiring current data (statistics, recent findings). "
+            "Write query in user's language."
         )
 
     @property

@@ -17,7 +17,12 @@ class RagSearchTool(BaseTool):
 
     @property
     def description(self) -> str:
-        return "Search through the user's uploaded documents for relevant information. Use when the user asks about their documents or specific content they uploaded."
+        return (
+            "Search student's uploaded lecture notes, book chapters, and study materials. "
+            "Use proactively if the question topic relates to student's coursework or uploaded documents. "
+            "Always search when student mentions 'in my files', 'in my notes', 'that I uploaded'. "
+            "Check documents first for uncertain topics — searching is better than giving wrong info."
+        )
 
     @property
     def parameters(self) -> dict:

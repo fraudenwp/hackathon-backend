@@ -44,10 +44,10 @@ class NewsSearchTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "Search for recent news articles and headlines. "
-            "Use when the user asks about current events, breaking news, "
-            "or recent developments. Returns news with source and date. "
-            "Write the query in the same language as the user's question."
+            "Search for recent news and current developments. "
+            "Use for queries like 'latest news', 'current events', 'what happened?'. "
+            "Ideal for breaking news and recent developments. "
+            "Returns results with source and date. Write query in user's language."
         )
 
     @property

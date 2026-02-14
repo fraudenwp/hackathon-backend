@@ -18,9 +18,9 @@ class ListDocumentsTool(BaseTool):
     @property
     def description(self) -> str:
         return (
-            "List the names of documents the user has uploaded. "
-            "Use when the user asks what documents they have, "
-            "or asks about their files. Does NOT search content."
+            "Show list of student's uploaded documents. "
+            "ONLY use when student asks 'what files do I have?' or 'what did I upload?'. "
+            "This tool does NOT search content, only lists filenames."
         )
 
     @property
