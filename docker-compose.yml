@@ -171,5 +171,5 @@ volumes:
     name: resai_chromadb_data
 
 networks:
-  resai_network:
+  dokploy-network:
     driver: bridge
