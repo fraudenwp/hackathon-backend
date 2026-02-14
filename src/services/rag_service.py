@@ -48,8 +48,8 @@ class RagService:
         self._client = chromadb.PersistentClient(path=persist_dir)
         self._embedding_fn = FalEmbeddingFunction(api_key=FAL_API_KEY)
         self._splitter = RecursiveCharacterTextSplitter(
-            chunk_size=500,
-            chunk_overlap=50,
+            chunk_size=1500,
+            chunk_overlap=200,
             separators=["\n\n", "\n", ". ", " ", ""],
         )
         logger.info("RagService initialized", persist_dir=persist_dir, model=EMBEDDING_MODEL)

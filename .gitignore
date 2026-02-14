@@ -14,3 +14,4 @@ dump.rdb
 .env.local
 .env.*.local
 CLAUDE.md
+latency_logs.json

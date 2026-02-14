@@ -33,6 +33,7 @@ TOOL_STATUS_MAP: dict[str, str] = {
     "list_documents": "Listing documents...",
     "news_search": "Searching news...",
     "wikipedia_search": "Searching Wikipedia...",
+    "generate_visual": "Generating visual...",
 }
 
 # Tool name → spoken filler (what the agent SAYS via TTS before running the tool)
@@ -42,6 +43,7 @@ TOOL_FILLER_MAP: dict[str, str] = {
     "list_documents": "Dökümanlarınıza bakıyorum.",
     "news_search": "Haberlere bakıyorum.",
     "wikipedia_search": "Wikipedia'ya bakıyorum.",
+    "generate_visual": "Bir görsel hazırlıyorum, ekrana bakın.",
 }
 
 
@@ -124,6 +126,15 @@ class FalLLMStream(LLMStream):
             except Exception:
                 pass
 
+    def _publish_visual(self, image_url: str) -> None:
+        """Send generated visual URL to frontend via status callback (JSON payload)"""
+        if self._on_status:
+            try:
+                # Prefix with __VISUAL__: so frontend can distinguish from status
+                self._on_status(f"__VISUAL__:{image_url}")
+            except Exception:
+                pass
+
     def _inject_rag_context(self, messages: list[dict]) -> list[dict]:
         """Search user's documents and inject relevant context into messages"""
         if not self._user_id:
@@ -146,7 +157,7 @@ class FalLLMStream(LLMStream):
                 return messages
 
             self._publish_status("Searching documents...")
-            results = rag_service.search(self._user_id, user_query, k=3, doc_ids=self._doc_ids)
+            results = rag_service.search(self._user_id, user_query, k=5, doc_ids=self._doc_ids)
             if not results:
                 return messages
 
@@ -217,7 +228,7 @@ class FalLLMStream(LLMStream):
 
         # Inject RAG context (skip for very short messages like greetings)
         self._publish_status("Thinking...")
-        if len(user_text.split()) >= 3:
+        if len(user_text.split()) >= 2:
             messages = self._inject_rag_context(messages)
 
         # Get tool definitions
@@ -230,6 +241,7 @@ class FalLLMStream(LLMStream):
         for _round in range(MAX_TOOL_ROUNDS):
             # Accumulate tool_calls from streamed chunks
             tool_calls_acc: dict[int, dict] = {}  # index -> {id, name, arguments}
+            filler_sent = False
             if used_tools:
                 self._publish_status("Analyzing results...")
             else:
@@ -274,6 +286,19 @@ class FalLLMStream(LLMStream):
                             tool_calls_acc[idx]["id"] = tc["id"]
                         if tc.get("function", {}).get("name"):
                             tool_calls_acc[idx]["name"] = tc["function"]["name"]
+                            # Speak filler immediately when tool name is known
+                            if not filler_sent:
+                                filler = TOOL_FILLER_MAP.get(
+                                    tc["function"]["name"], "Bir saniye bakayım."
+                                )
+                                self._event_ch.send_nowait(
+                                    ChatChunk(
+                                        id=request_id,
+                                        delta=ChoiceDelta(role="assistant", content=filler),
+                                    )
+                                )
+                                self._publish_status("Calling tools...")
+                                filler_sent = True
                         if tc.get("function", {}).get("arguments"):
                             tool_calls_acc[idx]["arguments"] += tc["function"]["arguments"]
 
@@ -284,18 +309,6 @@ class FalLLMStream(LLMStream):
             # Execute tool calls
             used_tools = True
             logger.info("Executing tool calls", count=len(tool_calls_acc))
-
-            # Speak a filler phrase so the user knows what's happening
-            tool_names = [tool_calls_acc[i]["name"] for i in sorted(tool_calls_acc.keys())]
-            filler = TOOL_FILLER_MAP.get(tool_names[0], "Bir saniye bakayım.")
-            self._event_ch.send_nowait(
-                ChatChunk(
-                    id=request_id,
-                    delta=ChoiceDelta(role="assistant", content=filler),
-                )
-            )
-
-            self._publish_status("Calling tools...")
 
             # Add assistant message with tool_calls to messages
             assistant_msg = {"role": "assistant", "content": None, "tool_calls": []}
@@ -332,6 +345,13 @@ class FalLLMStream(LLMStream):
                     result_len=len(result),
                     result_preview=result[:300],
                 )
+
+                # Intercept visual URL and broadcast to frontend
+                if result.startswith("__VISUAL_URL__:"):
+                    image_url = result[len("__VISUAL_URL__:"):]
+                    self._publish_visual(image_url)
+                    # Give the LLM a clean result
+                    result = "Görsel başarıyla oluşturuldu ve kullanıcının ekranında gösteriliyor. Görseli açıklamaya devam et."
 
                 messages.append({
                     "role": "tool",

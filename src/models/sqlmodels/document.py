@@ -15,6 +15,8 @@ class Document(SQLModel, table=True):
     r2_key: str = Field(...)
     content_type: str = Field(default="application/octet-stream")
 
+    description: Optional[str] = Field(default=None)  # auto-generated summary of content
+
     status: str = Field(default="pending")  # pending, processing, ready, failed
     chunk_count: int = Field(default=0)
     error_message: Optional[str] = None

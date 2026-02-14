@@ -92,17 +92,21 @@ async def list_conversation_messages(
 
 
 async def end_conversation(
-    db: AsyncSession, conversation_id: uuid.UUID
-) -> VoiceConversation:
+    db: AsyncSession, conversation_id: uuid.UUID, participant_count: int = 0,
+) -> Optional[VoiceConversation]:
     result = await db.execute(
         select(VoiceConversation).where(VoiceConversation.id == conversation_id)
     )
-    conversation = result.scalar_one()
+    conversation = result.scalar_one_or_none()
+    if not conversation or conversation.status == "ended":
+        return conversation
     conversation.status = "ended"
     conversation.ended_at = datetime.utcnow()
     if conversation.started_at:
         duration = (conversation.ended_at - conversation.started_at).total_seconds()
         conversation.total_duration_seconds = int(duration)
+    if participant_count > 0:
+        conversation.participant_count = participant_count
     await db.commit()
     await db.refresh(conversation)
     return conversation

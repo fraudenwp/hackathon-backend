@@ -8,10 +8,40 @@ from docx import Document as DocxDocument
 from src.constants.env import R2_BUCKET_NAME
 from src.models.database import db as database
 from src.crud.document import get_document, update_document_status
+from src.services.fal_ai import fal_ai_service
 from src.services.rag_service import rag_service
 from src.tasks.taskiq_setup import broker
 from src.utils.logger import logger
 from src.utils.s3_wrapper import S3ClientWrapper
+
+
+async def _generate_description(text: str, filename: str) -> str:
+    """Generate a short description of the document content using LLM."""
+    preview = text[:3000]
+    try:
+        description = await fal_ai_service.generate_llm_response(
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Sen bir döküman analiz uzmanısın. Sana bir dökümanın içeriğinin bir kısmı verilecek. "
+                        "Bu dökümanın ne hakkında olduğunu, hangi konuları kapsadığını ve ne tür bilgiler içerdiğini "
+                        "2-3 cümle ile Türkçe olarak özetle. Sadece özeti yaz, başka açıklama ekleme."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"Dosya adı: {filename}\n\nİçerik:\n{preview}",
+                },
+            ],
+            model="openai/gpt-4o-mini",
+            temperature=0.3,
+            max_tokens=300,
+        )
+        return description.strip()
+    except Exception as e:
+        logger.warning("Description generation failed", error=str(e))
+        return ""
 
 
 def _extract_text(file_path: str, content_type: str) -> str:
@@ -75,10 +105,13 @@ async def process_document_embedding(doc_id: str):
             filename=doc.filename,
         )
 
+        # Generate description of document content
+        description = await _generate_description(text, doc.filename)
+
         # Update status to ready
         async with database.get_session_context() as db:
             await update_document_status(
-                db, doc_id, status="ready", chunk_count=chunk_count
+                db, doc_id, status="ready", chunk_count=chunk_count, description=description
             )
 
         logger.info(

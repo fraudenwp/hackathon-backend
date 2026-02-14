@@ -15,6 +15,7 @@ class Agent(SQLModel, table=True):
     description: str = Field(default="")
     system_prompt: str = Field(default="")
     status: str = Field(default="generating")  # generating, ready, failed
+    teaching_mode: str = Field(default="default")  # default, socratic
 
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(

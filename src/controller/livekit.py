@@ -56,6 +56,40 @@ class LiveKitController:
                 system_prompt = agent.system_prompt
             doc_ids = await agent_crud.get_agent_document_ids(db, agent.id)
 
+            # Inject document descriptions into system prompt
+            if doc_ids:
+                docs = await agent_crud.get_agent_documents(db, agent.id)
+                doc_info_parts = []
+                for d in docs:
+                    if d.description:
+                        doc_info_parts.append(f"- {d.filename}: {d.description}")
+                    else:
+                        doc_info_parts.append(f"- {d.filename}")
+                if doc_info_parts and system_prompt:
+                    doc_info = "\n".join(doc_info_parts)
+                    system_prompt += (
+                        f"\n\n## ATANMIŞ DÖKÜMANLAR\n"
+                        f"Sana aşağıdaki dökümanlar atanmış. Kullanıcı bu konularla ilgili bir soru sorduğunda "
+                        f"search_documents aracını kullanarak dökümanlardan bilgi ara. "
+                        f"Bilgiye dayalı her soruda ÖNCE dökümanları kontrol et.\n\n{doc_info}"
+                    )
+
+            # Inject Socratic teaching mode
+            if getattr(agent, "teaching_mode", "default") == "socratic" and system_prompt:
+                system_prompt += (
+                    "\n\n## SOKRATİK DİYALOG MODU\n"
+                    "Bu mod aktif. Aşağıdaki kurallara MUTLAKA uy:\n"
+                    "1. Kullanıcı bir soru sorduğunda HEMEN cevap verme. Önce onun ne bildiğini anlamak için karşı soru sor.\n"
+                    "2. \"Sen bu konuda ne düşünüyorsun?\", \"Sence neden böyle olabilir?\" gibi yönlendirici sorular kullan.\n"
+                    "3. Kullanıcı bir cevap verirse:\n"
+                    "   - Doğruysa: Tebrik et ve derinleştirici bir soru daha sor.\n"
+                    "   - Kısmen doğruysa: Doğru kısmı onayla, eksik kısmı soru ile keşfettir.\n"
+                    "   - Yanlışsa: Nazikçe ipucu ver, doğru yöne bir soru ile yönlendir. Asla aşağılama.\n"
+                    "4. Kullanıcı 'bilmiyorum' veya 'söyle' derse, konuyu küçük parçalara bölerek adım adım açıkla.\n"
+                    "5. Her yanıtının sonunda düşünmeyi teşvik eden bir soru bırak.\n"
+                    "6. Samimi, sabırlı ve teşvik edici bir ton kullan.\n"
+                )
+
         # Generate unique room name
         room_name = f"room-{uuid.uuid4()}"
 

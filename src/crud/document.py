@@ -44,6 +44,7 @@ async def update_document_status(
     status: str,
     chunk_count: int = 0,
     error_message: Optional[str] = None,
+    description: Optional[str] = None,
 ) -> Optional[Document]:
     doc = await get_document(db, doc_id)
     if not doc:
@@ -52,6 +53,8 @@ async def update_document_status(
     doc.chunk_count = chunk_count
     if error_message:
         doc.error_message = error_message
+    if description:
+        doc.description = description
     await db.commit()
     await db.refresh(doc)
     return doc

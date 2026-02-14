@@ -154,10 +154,19 @@ class VoiceAgent:
             self.room = rtc.Room()
             self._disconnected_event = asyncio.Event()
 
-            # Listen for disconnect to unblock wait
+            # Track participants
+            self._participant_identities: set[str] = set()
+
+            @self.room.on("participant_connected")
+            def _on_participant_connected(participant, *args):
+                self._participant_identities.add(participant.identity)
+                logger.info("Participant connected", room=self.room_name, identity=participant.identity)
+
+            # Listen for disconnect — end conversation in DB
             @self.room.on("disconnected")
             def _on_disconnected(*args):
                 logger.info("Room disconnected", room=self.room_name)
+                asyncio.ensure_future(self._end_conversation())
                 self._disconnected_event.set()
 
             # Connect to room
@@ -165,11 +174,20 @@ class VoiceAgent:
 
             # Status callback — publishes agent status via LiveKit data channel
             def publish_status(status: str) -> None:
-                if self.room and self.room.local_participant:
-                    payload = _json.dumps({"type": "agent_status", "status": status}).encode()
+                if not (self.room and self.room.local_participant):
+                    return
+                # Visual image URL — send on dedicated topic
+                if status.startswith("__VISUAL__:"):
+                    image_url = status[len("__VISUAL__:"):]
+                    payload = _json.dumps({"type": "agent_visual", "url": image_url}).encode()
                     asyncio.ensure_future(
-                        self.room.local_participant.publish_data(payload, topic="agent_status")
+                        self.room.local_participant.publish_data(payload, topic="agent_visual")
                     )
+                    return
+                payload = _json.dumps({"type": "agent_status", "status": status}).encode()
+                asyncio.ensure_future(
+                    self.room.local_participant.publish_data(payload, topic="agent_status")
+                )
 
             # Create agent session — STT & TTS via LiveKit OpenAI plugin with fal.ai base_url
             self.session = AgentSession(
@@ -192,16 +210,16 @@ class VoiceAgent:
                     voice="alloy",
                 ),
                 vad=VAD.load(
-                    min_speech_duration=0.1,
-                    min_silence_duration=0.4,
+                    min_speech_duration=0.3,
+                    min_silence_duration=0.5,
                     prefix_padding_duration=0.3,
-                    activation_threshold=0.45,
+                    activation_threshold=0.6,
                 ),
                 # Echo/feedback loop prevention — allow interruptions but
                 # require real speech (not just echo picked up by mic)
                 allow_interruptions=True,
-                min_interruption_duration=0.5,
-                min_interruption_words=1,
+                min_interruption_duration=0.6,
+                min_interruption_words=2,
                 false_interruption_timeout=1.0,
                 resume_false_interruption=True,
             )
@@ -212,13 +230,17 @@ class VoiceAgent:
             )
 
             # -- Latency tracking events --
-            @self.session.on("user_speech_committed")
-            def _on_user_speech_committed(*args):
-                latency_tracker.on_user_speech_end(self.room_name)
+            @self.session.on("user_state_changed")
+            def _on_user_state_changed(ev):
+                # User stopped speaking → mark speech end
+                if ev.old_state == "speaking" and ev.new_state == "listening":
+                    latency_tracker.on_user_speech_end(self.room_name)
 
-            @self.session.on("agent_started_speaking")
-            def _on_agent_started_speaking(*args):
-                latency_tracker.on_agent_speech_start(self.room_name)
+            @self.session.on("agent_state_changed")
+            def _on_agent_state_changed(ev):
+                # Agent started speaking → measure latency
+                if ev.new_state == "speaking":
+                    latency_tracker.on_agent_speech_start(self.room_name)
 
             self.is_running = True
             logger.info("Voice agent started successfully", room=self.room_name)
@@ -226,6 +248,25 @@ class VoiceAgent:
         except Exception as e:
             log_error(logger, "Failed to start voice agent", e, room=self.room_name)
             raise
+
+    async def _end_conversation(self) -> None:
+        """End conversation in DB with duration and participant count"""
+        try:
+            from src.models.database import db as database
+            from src.crud.voice_conversation import get_conversation_by_room, end_conversation
+
+            async with database.get_session_context() as db:
+                conv = await get_conversation_by_room(db, self.room_name)
+                if conv and conv.status != "ended":
+                    participant_count = len(getattr(self, "_participant_identities", set()))
+                    await end_conversation(db, conv.id, participant_count=participant_count)
+                    logger.info(
+                        "Conversation ended",
+                        room=self.room_name,
+                        participant_count=participant_count,
+                    )
+        except Exception as e:
+            log_error(logger, "Failed to end conversation", e, room=self.room_name)
 
     async def wait_until_done(self) -> None:
         """Block until the room disconnects or agent is stopped"""

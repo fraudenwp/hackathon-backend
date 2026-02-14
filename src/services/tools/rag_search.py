@@ -45,7 +45,7 @@ class RagSearchTool(BaseTool):
             from src.services.rag_service import rag_service
 
             doc_ids = kwargs.get("doc_ids")
-            results = rag_service.search(user_id=user_id, query=query, k=3, doc_ids=doc_ids)
+            results = rag_service.search(user_id=user_id, query=query, k=5, doc_ids=doc_ids)
             if not results:
                 return "Kullanicinin dokumanlarinda ilgili bilgi bulunamadi."
 
